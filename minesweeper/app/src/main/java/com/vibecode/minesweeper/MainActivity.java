@@ -1,0 +1,22 @@
+package com.vibecode.minesweeper;
+
+import android.app.*;import android.os.*;import android.graphics.*;import android.graphics.drawable.*;import android.view.*;import android.widget.*;import java.util.*;
+
+public class MainActivity extends Activity{
+ Board b; public void onCreate(Bundle x){super.onCreate(x); LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);
+  LinearLayout bar=new LinearLayout(this); Button mode=new Button(this);mode.setText("⛏ Лопата"); Button easy=new Button(this);easy.setText("Легко"); Button med=new Button(this);med.setText("Середньо"); Button hard=new Button(this);hard.setText("Складно");
+  bar.addView(mode);bar.addView(easy);bar.addView(med);bar.addView(hard);root.addView(bar,new LinearLayout.LayoutParams(-1,-2));
+  b=new Board(); mode.setOnClickListener(v->{b.flag=!b.flag;mode.setText(b.flag?"🚩 Прапор":"⛏ Лопата");}); easy.setOnClickListener(v->b.newGame(9,9,10));med.setOnClickListener(v->b.newGame(16,16,40));hard.setOnClickListener(v->b.newGame(30,16,99));
+  ScrollView vs=new ScrollView(this);HorizontalScrollView hs=new HorizontalScrollView(this);hs.addView(b);vs.addView(hs);root.addView(vs,new LinearLayout.LayoutParams(-1,0,1));setContentView(root);b.newGame(9,9,10);
+ }
+ class Board extends View{int w,h,mines,cell=42;boolean flag;boolean[][] mine,open,marked;int[][] n;Paint p=new Paint(1);long down;
+  Board(){super(MainActivity.this);p.setTypeface(Typeface.DEFAULT_BOLD);}
+  void newGame(int W,int H,int M){w=W;h=H;mines=M;mine=new boolean[h][w];open=new boolean[h][w];marked=new boolean[h][w];n=new int[h][w];Random r=new Random();int k=0;while(k<M){int y=r.nextInt(h),x=r.nextInt(w);if(!mine[y][x]){mine[y][x]=true;k++;}}for(int y=0;y<h;y++)for(int x=0;x<w;x++){for(int yy=y-1;yy<=y+1;yy++)for(int xx=x-1;xx<=x+1;xx++)if(yy>=0&&yy<h&&xx>=0&&xx<w&&mine[yy][xx])n[y][x]++;}requestLayout();invalidate();}
+  protected void onMeasure(int a,int z){setMeasuredDimension(w*cell,h*cell);}
+  protected void onDraw(Canvas c){p.setTextAlign(Paint.Align.CENTER);p.setTextSize(cell*.55f);for(int y=0;y<h;y++)for(int x=0;x<w;x++){float l=x*cell,t=y*cell;p.setStyle(Paint.Style.FILL);p.setColor(open[y][x]?Color.rgb(210,210,210):Color.rgb(185,185,185));c.drawRect(l,t,l+cell,t+cell,p);p.setStyle(Paint.Style.STROKE);p.setColor(Color.GRAY);c.drawRect(l,t,l+cell,t+cell,p);p.setStyle(Paint.Style.FILL);if(marked[y][x]){p.setColor(Color.RED);c.drawText("⚑",l+cell/2,t+cell*.7f,p);}else if(open[y][x]){if(mine[y][x]){p.setColor(Color.BLACK);c.drawCircle(l+cell/2,t+cell/2,cell*.22f,p);}else if(n[y][x]>0){p.setColor(new int[]{0,Color.BLUE,Color.rgb(0,120,0),Color.RED,Color.rgb(0,0,120),Color.rgb(128,0,0),Color.CYAN,Color.BLACK,Color.GRAY}[n[y][x]]);c.drawText(""+n[y][x],l+cell/2,t+cell*.7f,p);}}}}
+  public boolean onTouchEvent(android.view.MotionEvent e){int x=(int)(e.getX()/cell),y=(int)(e.getY()/cell);if(x<0||x>=w||y<0||y>=h)return true;if(e.getAction()==0){down=System.currentTimeMillis();return true;}if(e.getAction()==1){long d=System.currentTimeMillis()-down;if(d>450)chord(x,y);else if(flag)toggleFlag(x,y);else reveal(x,y);invalidate();return true;}return true;}
+  void toggleFlag(int x,int y){if(!open[y][x])marked[y][x]=!marked[y][x];}
+  void reveal(int x,int y){if(open[y][x]||marked[y][x])return;if(mine[y][x]){for(int yy=0;yy<h;yy++)for(int xx=0;xx<w;xx++)if(mine[yy][xx])open[yy][xx]=true;invalidate();Toast.makeText(MainActivity.this,"Міна!",Toast.LENGTH_SHORT).show();return;}open[y][x]=true;if(n[y][x]==0)for(int yy=y-1;yy<=y+1;yy++)for(int xx=x-1;xx<=x+1;xx++)if(yy>=0&&yy<h&&xx>=0&&xx<w&&(xx!=x||yy!=y))reveal(xx,yy);}
+  void chord(int x,int y){if(!open[y][x]||n[y][x]==0)return;int f=0;for(int yy=y-1;yy<=y+1;yy++)for(int xx=x-1;xx<=x+1;xx++)if(yy>=0&&yy<h&&xx>=0&&xx<w&&marked[yy][xx])f++;if(f==n[y][x])for(int yy=y-1;yy<=y+1;yy++)for(int xx=x-1;xx<=x+1;xx++)if(yy>=0&&yy<h&&xx>=0&&xx<w&&!marked[yy][xx])reveal(xx,yy);}
+ }
+}
