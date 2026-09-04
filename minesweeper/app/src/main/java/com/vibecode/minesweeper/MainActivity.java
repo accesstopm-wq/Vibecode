@@ -10,8 +10,11 @@ import java.util.*;
 
 public class MainActivity extends Activity {
     Board board;
-    Button modeButton;
-    Button zoomButton;
+    HorizontalScrollView horizontal;
+    ScrollView vertical;
+    TextView zoomText;
+
+    static final int BASE_CELL = 128;
 
     @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -22,14 +25,9 @@ public class MainActivity extends Activity {
         final LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.rgb(192, 192, 192));
-
-        // Android 15 / targetSdk 35 draws edge-to-edge. Reserve the system-bar area
-        // so the toolbar cannot disappear underneath the status bar.
         root.setOnApplyWindowInsetsListener((v, insets) -> {
-            v.setPadding(insets.getSystemWindowInsetLeft(),
-                    insets.getSystemWindowInsetTop(),
-                    insets.getSystemWindowInsetRight(),
-                    insets.getSystemWindowInsetBottom());
+            v.setPadding(insets.getSystemWindowInsetLeft(), insets.getSystemWindowInsetTop(),
+                    insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom());
             return insets;
         });
 
@@ -43,66 +41,62 @@ public class MainActivity extends Activity {
         toolbarScroll.setFillViewport(true);
         toolbarScroll.addView(toolbar, new HorizontalScrollView.LayoutParams(-2, -1));
 
-        modeButton = button("⚑");
+        Button mode = button("⚑");
         Button easy = button("9×9");
         Button medium = button("16×16");
         Button hard = button("30×16");
         Button restart = button("↻");
-        Button minus = button("−");
-        zoomButton = button("100%");
-        Button plus = button("+");
+        zoomText = new TextView(this);
+        zoomText.setText("100%");
+        zoomText.setTextSize(18);
+        zoomText.setTextColor(Color.BLACK);
+        zoomText.setGravity(Gravity.CENTER);
+        zoomText.setPadding(10, 0, 10, 0);
 
-        toolbar.addView(modeButton, toolLp(64));
-        toolbar.addView(easy, toolLp(76));
-        toolbar.addView(medium, toolLp(86));
-        toolbar.addView(hard, toolLp(86));
-        toolbar.addView(restart, toolLp(64));
-        toolbar.addView(minus, toolLp(64));
-        toolbar.addView(zoomButton, toolLp(82));
-        toolbar.addView(plus, toolLp(64));
-
-        root.addView(toolbarScroll, new LinearLayout.LayoutParams(-1, 68));
+        toolbar.addView(mode, toolLp(82));
+        toolbar.addView(easy, toolLp(92));
+        toolbar.addView(medium, toolLp(104));
+        toolbar.addView(hard, toolLp(104));
+        toolbar.addView(restart, toolLp(82));
+        toolbar.addView(zoomText, toolLp(92));
+        root.addView(toolbarScroll, new LinearLayout.LayoutParams(-1, 82));
 
         board = new Board(this);
 
-        ScrollView vertical = new ScrollView(this);
+        vertical = new ScrollView(this);
         vertical.setFillViewport(false);
         vertical.setClipToPadding(false);
         vertical.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);
 
-        HorizontalScrollView horizontal = new HorizontalScrollView(this);
+        horizontal = new HorizontalScrollView(this);
         horizontal.setFillViewport(false);
         horizontal.setClipToPadding(false);
         horizontal.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);
         horizontal.addView(board, new HorizontalScrollView.LayoutParams(-2, -2));
         vertical.addView(horizontal, new ScrollView.LayoutParams(-1, -2));
         root.addView(vertical, new LinearLayout.LayoutParams(-1, 0, 1));
-
         setContentView(root);
 
-        modeButton.setOnClickListener(v -> {
+        mode.setOnClickListener(v -> {
             board.flagMode = !board.flagMode;
-            modeButton.setText(board.flagMode ? "⚑" : "⛏");
+            mode.setText(board.flagMode ? "⚑" : "⛏");
         });
         easy.setOnClickListener(v -> board.newGame(9, 9, 10));
         medium.setOnClickListener(v -> board.newGame(16, 16, 40));
         hard.setOnClickListener(v -> board.newGame(30, 16, 99));
         restart.setOnClickListener(v -> board.newGame(board.w, board.h, board.mines));
-        minus.setOnClickListener(v -> { board.setCellSize(board.cell - 4); updateZoom(); });
-        plus.setOnClickListener(v -> { board.setCellSize(board.cell + 4); updateZoom(); });
-        zoomButton.setOnClickListener(v -> { board.setCellSize(64); updateZoom(); });
 
         board.newGame(9, 9, 10);
     }
 
-    void updateZoom() {
-        zoomButton.setText(Math.round(board.cell * 100f / 64f) + "%");
+    void updateZoomText() {
+        zoomText.setText(Math.round(board.cell * 100f / BASE_CELL) + "%");
     }
 
     Button button(String text) {
         Button b = new Button(this);
         b.setText(text);
-        b.setTextSize(18);
+        b.setTextSize(19);
         b.setMinHeight(0);
         b.setMinWidth(0);
         b.setMinimumHeight(0);
@@ -113,20 +107,24 @@ public class MainActivity extends Activity {
     }
 
     LinearLayout.LayoutParams toolLp(int width) {
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(width, 58);
-        p.setMargins(2, 1, 2, 1);
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(width, 72);
+        p.setMargins(3, 1, 3, 1);
         return p;
     }
 
     class Board extends View {
-        int w = 9, h = 9, mines = 10, cell = 64, flagCount = 0;
+        int w = 9, h = 9, mines = 10, cell = BASE_CELL, flagCount = 0;
         boolean flagMode, lost, won;
         boolean[][] mine, open, marked;
         int[][] number;
         Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
         Random random = new Random();
+        ScaleGestureDetector scaleDetector;
         float downX, downY;
-        boolean moved;
+        boolean moved, scaling;
+        final float MIN_CELL = 64f;
+        final float MAX_CELL = 256f;
+        final float TOUCH_SLOP = 18f;
 
         Board(Context context) {
             super(context);
@@ -134,12 +132,48 @@ public class MainActivity extends Activity {
             setBackgroundColor(Color.rgb(128, 128, 128));
             setFocusable(true);
             setClickable(true);
+            scaleDetector = new ScaleGestureDetector(context, new ScaleGestureDetector.SimpleOnScaleGestureListener() {
+                @Override public boolean onScaleBegin(ScaleGestureDetector detector) {
+                    scaling = true;
+                    moved = true;
+                    requestDisallowParentIntercept(true);
+                    return true;
+                }
+
+                @Override public boolean onScale(ScaleGestureDetector detector) {
+                    float oldCell = cell;
+                    float newCell = Math.max(MIN_CELL, Math.min(MAX_CELL, oldCell * detector.getScaleFactor()));
+                    if (Math.abs(newCell - oldCell) < 0.5f) return true;
+
+                    float fx = detector.getFocusX();
+                    float fy = detector.getFocusY();
+                    final float contentX = horizontal.getScrollX() + fx;
+                    final float contentY = vertical.getScrollY() + fy;
+                    final float ratio = newCell / oldCell;
+
+                    cell = Math.round(newCell);
+                    requestLayout();
+                    invalidate();
+                    updateZoomText();
+
+                    post(() -> {
+                        int sx = Math.round(contentX * ratio - fx);
+                        int sy = Math.round(contentY * ratio - fy);
+                        horizontal.scrollTo(Math.max(0, sx), horizontal.getScrollY());
+                        vertical.scrollTo(vertical.getScrollX(), Math.max(0, sy));
+                    });
+                    return true;
+                }
+
+                @Override public void onScaleEnd(ScaleGestureDetector detector) {
+                    scaling = false;
+                    requestDisallowParentIntercept(false);
+                }
+            });
         }
 
-        void setCellSize(int value) {
-            cell = Math.max(40, Math.min(96, value));
-            requestLayout();
-            invalidate();
+        void requestDisallowParentIntercept(boolean disallow) {
+            getParent().requestDisallowInterceptTouchEvent(disallow);
         }
 
         void newGame(int W, int H, int M) {
@@ -190,24 +224,15 @@ public class MainActivity extends Activity {
         @Override protected void onDraw(Canvas c) {
             super.onDraw(c);
             p.setTextAlign(Paint.Align.CENTER);
-
             for (int y = 0; y < h; y++) {
                 for (int x = 0; x < w; x++) {
-                    float l = x * cell;
-                    float t = y * cell;
-                    float r = l + cell;
-                    float b = t + cell;
-
+                    float l = x * cell, t = y * cell, r = l + cell, b = t + cell;
                     if (open[y][x]) drawOpenCell(c, l, t, r, b);
                     else drawClosedCell(c, l, t, r, b);
 
-                    if (marked[y][x]) {
-                        drawFlag(c, l, t);
-                    } else if (open[y][x] && mine[y][x]) {
-                        drawMine(c, l, t);
-                    } else if (open[y][x] && number[y][x] > 0) {
-                        drawNumber(c, l, t, number[y][x]);
-                    }
+                    if (marked[y][x]) drawFlag(c, l, t);
+                    else if (open[y][x] && mine[y][x]) drawMine(c, l, t);
+                    else if (open[y][x] && number[y][x] > 0) drawNumber(c, l, t, number[y][x]);
                 }
             }
         }
@@ -226,7 +251,6 @@ public class MainActivity extends Activity {
             p.setStyle(Paint.Style.FILL);
             p.setColor(Color.rgb(192, 192, 192));
             c.drawRect(l, t, r, b, p);
-
             p.setStyle(Paint.Style.STROKE);
             p.setStrokeWidth(Math.max(3, cell / 16f));
             p.setColor(Color.WHITE);
@@ -239,17 +263,8 @@ public class MainActivity extends Activity {
         }
 
         void drawNumber(Canvas c, float l, float t, int n) {
-            int[] colors = {
-                    Color.TRANSPARENT,
-                    Color.BLUE,
-                    Color.rgb(0, 128, 0),
-                    Color.RED,
-                    Color.rgb(0, 0, 128),
-                    Color.rgb(128, 0, 0),
-                    Color.rgb(0, 128, 128),
-                    Color.BLACK,
-                    Color.GRAY
-            };
+            int[] colors = {Color.TRANSPARENT, Color.BLUE, Color.rgb(0,128,0), Color.RED,
+                    Color.rgb(0,0,128), Color.rgb(128,0,0), Color.rgb(0,128,128), Color.BLACK, Color.GRAY};
             p.setStyle(Paint.Style.FILL);
             p.setColor(colors[Math.min(n, 8)]);
             p.setTextSize(cell * 0.58f);
@@ -275,55 +290,64 @@ public class MainActivity extends Activity {
         }
 
         void drawMine(Canvas c, float l, float t) {
-            float cx = l + cell / 2f;
-            float cy = t + cell / 2f;
-            float rad = cell * .22f;
-
+            float cx = l + cell / 2f, cy = t + cell / 2f, rad = cell * .22f;
             p.setStyle(Paint.Style.STROKE);
             p.setStrokeWidth(Math.max(3, cell * .045f));
             p.setColor(Color.BLACK);
             for (int i = 0; i < 8; i++) {
                 double a = i * Math.PI / 4;
-                c.drawLine(
-                        cx + (float) Math.cos(a) * rad * .55f,
-                        cy + (float) Math.sin(a) * rad * .55f,
-                        cx + (float) Math.cos(a) * rad * 1.45f,
-                        cy + (float) Math.sin(a) * rad * 1.45f,
-                        p
-                );
+                c.drawLine(cx + (float)Math.cos(a)*rad*.55f, cy + (float)Math.sin(a)*rad*.55f,
+                        cx + (float)Math.cos(a)*rad*1.45f, cy + (float)Math.sin(a)*rad*1.45f, p);
             }
             p.setStyle(Paint.Style.FILL);
             p.setColor(Color.RED);
             c.drawCircle(cx, cy, rad, p);
             p.setColor(Color.WHITE);
-            c.drawCircle(cx - rad * .35f, cy - rad * .35f, rad * .22f, p);
+            c.drawCircle(cx - rad*.35f, cy - rad*.35f, rad*.22f, p);
         }
 
         @Override public boolean onTouchEvent(MotionEvent e) {
+            scaleDetector.onTouchEvent(e);
+
             switch (e.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
                     downX = e.getX();
                     downY = e.getY();
                     moved = false;
-                    // Do not ask the parent to stop intercepting: ScrollView must be
-                    // allowed to take over when the finger starts dragging the board.
+                    scaling = false;
+                    return true;
+
+                case MotionEvent.ACTION_POINTER_DOWN:
+                    moved = true;
+                    requestDisallowParentIntercept(true);
                     return true;
 
                 case MotionEvent.ACTION_MOVE:
-                    if (Math.abs(e.getX() - downX) > 12 || Math.abs(e.getY() - downY) > 12) {
+                    if (e.getPointerCount() > 1 || scaling) {
+                        moved = true;
+                        return true;
+                    }
+                    if (Math.abs(e.getX() - downX) > TOUCH_SLOP || Math.abs(e.getY() - downY) > TOUCH_SLOP) {
                         moved = true;
                     }
                     return true;
 
-                case MotionEvent.ACTION_UP:
-                    if (moved || lost || won) return true;
+                case MotionEvent.ACTION_POINTER_UP:
+                    return true;
 
-                    int x = (int) (e.getX() / cell);
-                    int y = (int) (e.getY() / cell);
+                case MotionEvent.ACTION_CANCEL:
+                    requestDisallowParentIntercept(false);
+                    scaling = false;
+                    return true;
+
+                case MotionEvent.ACTION_UP:
+                    requestDisallowParentIntercept(false);
+                    if (moved || scaling || lost || won) return true;
+
+                    int x = (int)(e.getX() / cell);
+                    int y = (int)(e.getY() / cell);
                     if (!inside(x, y)) return true;
 
-                    // A short tap on an already-open number ALWAYS chords.
-                    // Flag mode only changes what tapping a closed cell does.
                     if (open[y][x] && number[y][x] > 0) {
                         chord(x, y);
                     } else if (flagMode) {
@@ -331,16 +355,21 @@ public class MainActivity extends Activity {
                     } else if (!open[y][x]) {
                         reveal(x, y);
                     }
-
                     checkWin();
                     invalidate();
+                    performClick();
                     return true;
             }
             return true;
         }
 
+        @Override public boolean performClick() {
+            super.performClick();
+            return true;
+        }
+
         void toggleFlag(int x, int y) {
-            if (open[y][x] || lost || won) return;
+            if (lost || won || open[y][x]) return;
             if (marked[y][x]) {
                 marked[y][x] = false;
                 flagCount--;
@@ -352,11 +381,9 @@ public class MainActivity extends Activity {
 
         void reveal(int x, int y) {
             if (lost || won || !inside(x, y) || open[y][x] || marked[y][x]) return;
-
             open[y][x] = true;
             if (mine[y][x]) {
                 lost = true;
-                // Reveal all mines only after losing; no further actions are accepted.
                 for (int yy = 0; yy < h; yy++) {
                     for (int xx = 0; xx < w; xx++) {
                         if (mine[yy][xx]) open[yy][xx] = true;
@@ -364,7 +391,6 @@ public class MainActivity extends Activity {
                 }
                 return;
             }
-
             if (number[y][x] == 0) {
                 for (int yy = y - 1; yy <= y + 1; yy++) {
                     for (int xx = x - 1; xx <= x + 1; xx++) {
@@ -375,7 +401,7 @@ public class MainActivity extends Activity {
         }
 
         void chord(int x, int y) {
-            if (lost || won || !open[y][x] || number[y][x] == 0) return;
+            if (lost || won || !inside(x, y) || !open[y][x] || number[y][x] <= 0) return;
 
             int flags = 0;
             for (int yy = y - 1; yy <= y + 1; yy++) {
@@ -384,17 +410,22 @@ public class MainActivity extends Activity {
                 }
             }
 
-            // Standard Minesweeper chord: reveal neighbours only when the
-            // number of adjacent flags equals the number on the cell.
             if (flags != number[y][x]) return;
 
+            // First collect all still-covered, unflagged neighbours.
+            // This makes chord behavior identical for corners, edges and the center.
+            ArrayList<int[]> targets = new ArrayList<>();
             for (int yy = y - 1; yy <= y + 1; yy++) {
                 for (int xx = x - 1; xx <= x + 1; xx++) {
-                    if (inside(xx, yy) && !marked[yy][xx] && !open[yy][xx]) {
-                        reveal(xx, yy);
-                        if (lost) return;
+                    if (inside(xx, yy) && !open[yy][xx] && !marked[yy][xx]) {
+                        targets.add(new int[]{xx, yy});
                     }
                 }
+            }
+
+            for (int[] target : targets) {
+                reveal(target[0], target[1]);
+                if (lost) return;
             }
         }
 
