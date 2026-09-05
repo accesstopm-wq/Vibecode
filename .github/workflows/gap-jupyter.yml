@@ -3,6 +3,9 @@ name: GAP JupyterLab
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   jupyter:
     name: Interactive GAP JupyterLab
@@ -24,6 +27,7 @@ jobs:
       - name: Start GAP JupyterLab
         env:
           JUPYTER_TOKEN: ${{ github.run_id }}-${{ github.run_attempt }}-gap
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           docker rm -f gap-jupyter 2>/dev/null || true
           docker run -d \
@@ -31,9 +35,12 @@ jobs:
             -p 127.0.0.1:8888:8888 \
             -e JUPYTER_TOKEN="$JUPYTER_TOKEN" \
             -e JUPYTER_GAP_EXECUTABLE=gap \
-            -v "$GITHUB_WORKSPACE/gap-jupyter/notebooks:/workspace" \
+            -e GITHUB_TOKEN="$GITHUB_TOKEN" \
+            -e GITHUB_REPOSITORY="$GITHUB_REPOSITORY" \
+            -e GITHUB_REF_NAME="$GITHUB_REF_NAME" \
+            -v "$GITHUB_WORKSPACE/gap-jupyter:/workspace" \
             ghcr.io/gap-system/jupyter-gap:4.15.0-full \
-            sh -lc 'python3 -m pip install --user --no-cache-dir "jupyterlab==3.6.8" "notebook==6.5.7" && exec jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --ServerApp.token="$JUPYTER_TOKEN" --ServerApp.root_dir=/workspace --ServerApp.allow_remote_access=True --ServerApp.trust_xheaders=True --ServerApp.allow_origin="*"'
+            sh -lc 'chmod +x /workspace/save-to-github.py && ln -sf /workspace/save-to-github.py /opt/gap/.local/bin/save-to-github && python3 -m pip install --user --no-cache-dir "jupyterlab==3.6.8" "notebook==6.5.7" && exec jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --ServerApp.token="$JUPYTER_TOKEN" --ServerApp.root_dir=/workspace/notebooks --ServerApp.allow_remote_access=True --ServerApp.trust_xheaders=True --ServerApp.allow_origin="*"'
 
           echo "Waiting for JupyterLab and GAP kernel..."
           for i in {1..90}; do
@@ -56,7 +63,7 @@ jobs:
           echo "Jupyter kernels:"
           docker exec gap-jupyter jupyter kernelspec list || true
           echo "GAP executable:"
-          docker exec gap-jupyter sh -lc 'command -v gap; command -v jupyter-kernel-gap; echo JUPYTER_GAP_EXECUTABLE=$JUPYTER_GAP_EXECUTABLE'
+          docker exec gap-jupyter sh -lc 'command -v gap; command -v jupyter-kernel-gap; echo JUPYTER_GAP_EXECUTABLE=$JUPYTER_GAP_EXECUTABLE; command -v save-to-github'
           echo "GAP package check:"
           docker exec gap-jupyter gap -q -c 'Print(LoadPackage("JupyterKernel"),"\\n"); QUIT;'
 
@@ -66,7 +73,7 @@ jobs:
           from jupyter_client import KernelManager
 
           km = KernelManager(kernel_name="gap-4")
-          km.start_kernel(cwd="/workspace")
+          km.start_kernel(cwd="/workspace/notebooks")
           kc = km.client()
           kc.start_channels()
           try:
