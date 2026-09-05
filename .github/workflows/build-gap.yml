@@ -13,15 +13,13 @@ permissions:
 jobs:
   gap:
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/homalg-project/gap-docker:latest
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install GAP
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gap
-
-      - name: Run all GAP code
+      - name: Run GAP
         run: gap -q gap/test.g > gap/result.txt
 
       - name: Commit generated result
