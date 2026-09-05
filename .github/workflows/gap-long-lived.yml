@@ -60,14 +60,7 @@ jobs:
               echo "=== GAP result ==="
               cat "$result"
 
-              RESULT_FILE="$result" RESULT_NAME="gap-result-${n}-${stamp}" node --input-type=module <<'NODE'
-              import { DefaultArtifactClient } from '@actions/artifact';
-              const client = new DefaultArtifactClient();
-              const file = process.env.RESULT_FILE;
-              const name = process.env.RESULT_NAME;
-              const response = await client.uploadArtifact(name, [file], '/tmp', { retentionDays: 1, compressionLevel: 0 });
-              console.log(`Uploaded artifact ${name}, id=${response.id}, size=${response.size}`);
-              NODE
+              RESULT_FILE="$result" RESULT_NAME="gap-result-${n}-${stamp}" node --input-type=module -e "import { DefaultArtifactClient } from '@actions/artifact'; const client = new DefaultArtifactClient(); const r = await client.uploadArtifact(process.env.RESULT_NAME, [process.env.RESULT_FILE], '/tmp', { retentionDays: 1, compressionLevel: 0 }); console.log('Uploaded artifact ' + process.env.RESULT_NAME + ', id=' + r.id + ', size=' + r.size);"
 
               last_sha="$sha"
             fi
