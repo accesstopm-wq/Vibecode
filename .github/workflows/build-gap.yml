@@ -10,11 +10,15 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: gap-build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   gap:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/homalg-project/gap-docker:latest
+      image: ghcr.io/gap-system/gap:4.15.1-bare
 
     steps:
       - uses: actions/checkout@v4
