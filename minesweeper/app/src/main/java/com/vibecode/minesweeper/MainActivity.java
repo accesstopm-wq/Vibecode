@@ -13,7 +13,7 @@ public class MainActivity extends Activity {
     HorizontalScrollView horizontal;
     ScrollView vertical;
     TextView zoomText, mineCounter;
-    Button smileButton;
+    Button smileButton, modeButton;
     static final int BASE_CELL = 128;
 
     @Override public void onCreate(Bundle savedInstanceState) {
@@ -25,12 +25,12 @@ public class MainActivity extends Activity {
         root.setOnApplyWindowInsetsListener((v,insets)->{v.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());return insets;});
         LinearLayout toolbar=new LinearLayout(this); toolbar.setOrientation(LinearLayout.HORIZONTAL); toolbar.setGravity(Gravity.CENTER_VERTICAL); toolbar.setPadding(5,5,5,5);
         HorizontalScrollView toolbarScroll=new HorizontalScrollView(this); toolbarScroll.setHorizontalScrollBarEnabled(false); toolbarScroll.setFillViewport(true); toolbarScroll.addView(toolbar,new HorizontalScrollView.LayoutParams(-2,-1));
-        Button mode=button("⚑"),easy=button("9×9"),medium=button("16×16"),hard=button("30×16"); mineCounter=counter(); smileButton=button("🙂");
+        modeButton=button("⛏"); Button easy=button("9×9"),medium=button("16×16"),hard=button("30×16"); mineCounter=counter(); smileButton=button("🙂");
         zoomText=new TextView(this); zoomText.setText("100%"); zoomText.setTextSize(22); zoomText.setTextColor(Color.BLACK); zoomText.setGravity(Gravity.CENTER);
-        toolbar.addView(mode,toolLp(162)); toolbar.addView(easy,toolLp(174)); toolbar.addView(medium,toolLp(198)); toolbar.addView(hard,toolLp(198)); toolbar.addView(mineCounter,toolLp(162)); toolbar.addView(smileButton,toolLp(162)); toolbar.addView(zoomText,toolLp(162)); root.addView(toolbarScroll,new LinearLayout.LayoutParams(-1,142));
+        toolbar.addView(modeButton,toolLp(162)); toolbar.addView(easy,toolLp(174)); toolbar.addView(medium,toolLp(198)); toolbar.addView(hard,toolLp(198)); toolbar.addView(mineCounter,toolLp(162)); toolbar.addView(smileButton,toolLp(162)); toolbar.addView(zoomText,toolLp(162)); root.addView(toolbarScroll,new LinearLayout.LayoutParams(-1,142));
         board=new Board(this); vertical=new ScrollView(this); vertical.setFillViewport(false); vertical.setClipToPadding(false); vertical.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);
         horizontal=new HorizontalScrollView(this); horizontal.setFillViewport(false); horizontal.setClipToPadding(false); horizontal.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS); horizontal.addView(board,new HorizontalScrollView.LayoutParams(-2,-2)); vertical.addView(horizontal,new ScrollView.LayoutParams(-1,-2)); root.addView(vertical,new LinearLayout.LayoutParams(-1,0,1)); setContentView(root);
-        mode.setOnClickListener(v->{board.flagMode=!board.flagMode;mode.setText(board.flagMode?"⚑":"⛏");}); easy.setOnClickListener(v->board.newGame(9,9,10)); medium.setOnClickListener(v->board.newGame(16,16,40)); hard.setOnClickListener(v->board.newGame(30,16,99)); smileButton.setOnClickListener(v->board.newGame(board.w,board.h,board.mines)); board.newGame(9,9,10);
+        modeButton.setOnClickListener(v->{board.flagMode=!board.flagMode;modeButton.setText(board.flagMode?"⚑":"⛏");}); easy.setOnClickListener(v->board.newGame(9,9,10)); medium.setOnClickListener(v->board.newGame(16,16,40)); hard.setOnClickListener(v->board.newGame(30,16,99)); smileButton.setOnClickListener(v->board.newGame(board.w,board.h,board.mines)); board.newGame(9,9,10);
     }
     void updateZoomText(){zoomText.setText(Math.round(board.cell*100f/BASE_CELL)+"%");} void updateMineCounter(){mineCounter.setText("💣 "+Math.max(0,board.mines-board.flagCount));} void updateSmiley(){smileButton.setText(board.lost?"😵":board.won?"😎":"🙂");}
     Button button(String text){Button b=new Button(this);b.setText(text);b.setTextSize(25);b.setMinHeight(0);b.setMinWidth(0);b.setMinimumHeight(0);b.setMinimumWidth(0);b.setPadding(0,0,0,0);b.setAllCaps(false);return b;}
@@ -46,7 +46,7 @@ public class MainActivity extends Activity {
             @Override public void onScaleEnd(ScaleGestureDetector d){scaling=false;requestDisallowParentIntercept(false);}
         });}
         void requestDisallowParentIntercept(boolean b){ViewParent q=getParent();if(q!=null)q.requestDisallowInterceptTouchEvent(b);}
-        void newGame(int W,int H,int M){w=W;h=H;mines=M;flagCount=0;lost=false;won=false;minesGenerated=false;mine=new boolean[h][w];open=new boolean[h][w];marked=new boolean[h][w];number=new int[h][w];requestLayout();invalidate();updateMineCounter();updateSmiley();updateZoomText();}
+        void newGame(int W,int H,int M){w=W;h=H;mines=M;flagCount=0;flagMode=false;modeButton.setText("⛏");lost=false;won=false;minesGenerated=false;mine=new boolean[h][w];open=new boolean[h][w];marked=new boolean[h][w];number=new int[h][w];requestLayout();invalidate();updateMineCounter();updateSmiley();updateZoomText();}
         void generateMines(int sx,int sy){int n=0;while(n<mines){int x=random.nextInt(w),y=random.nextInt(h);if((x==sx&&y==sy)||mine[y][x])continue;mine[y][x]=true;n++;}for(int y=0;y<h;y++)for(int x=0;x<w;x++){int c=0;for(int yy=y-1;yy<=y+1;yy++)for(int xx=x-1;xx<=x+1;xx++)if(inside(xx,yy)&&mine[yy][xx])c++;number[y][x]=c;}minesGenerated=true;}
         boolean inside(int x,int y){return x>=0&&x<w&&y>=0&&y<h;} @Override protected void onMeasure(int a,int b){setMeasuredDimension(w*cell,h*cell);}
         @Override protected void onDraw(Canvas c){super.onDraw(c);p.setTextAlign(Paint.Align.CENTER);for(int y=0;y<h;y++)for(int x=0;x<w;x++){float l=x*cell,t=y*cell,r=l+cell,b=t+cell;if(open[y][x])drawOpenCell(c,l,t,r,b);else drawClosedCell(c,l,t,r,b);if(marked[y][x])drawFlag(c,l,t);else if(open[y][x]&&mine[y][x])drawMine(c,l,t);else if(open[y][x]&&number[y][x]>0)drawNumber(c,l,t,number[y][x]);}}
