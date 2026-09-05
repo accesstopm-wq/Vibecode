@@ -10,4 +10,5 @@ S6 := SymmetricGroup(6);;
 emb := IsomorphicSubgroups(S6, W)[1];;
 H := Image(emb);;
 
+Print("W and H are isomorphic: ", IsIsomorphic(W, H), "\n");
 Print(Elements(H), "\n");
