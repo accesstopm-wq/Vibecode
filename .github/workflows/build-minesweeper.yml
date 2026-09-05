@@ -36,8 +36,10 @@ jobs:
           set -e
           echo "$KEYSTORE_BASE64" | base64 -d > signing.jks
           APK="minesweeper/app/build/outputs/apk/debug/app-debug.apk"
-          apksigner sign --ks signing.jks --ks-key-alias "$KEY_ALIAS" --ks-pass "pass:$KEYSTORE_PASSWORD" --key-pass "pass:$KEY_PASSWORD" "$APK"
-          apksigner verify --verbose "$APK"
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n 1)
+          test -x "$APKSIGNER"
+          "$APKSIGNER" sign --ks signing.jks --ks-key-alias "$KEY_ALIAS" --ks-pass "pass:$KEYSTORE_PASSWORD" --key-pass "pass:$KEY_PASSWORD" "$APK"
+          "$APKSIGNER" verify --verbose "$APK"
           rm -f signing.jks
       - uses: actions/upload-artifact@v4
         with:
