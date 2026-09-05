@@ -28,7 +28,6 @@ jobs:
           docker rm -f gap-jupyter 2>/dev/null || true
           docker run -d \
             --name gap-jupyter \
-            --user root \
             -p 127.0.0.1:8888:8888 \
             -e JUPYTER_TOKEN="$JUPYTER_TOKEN" \
             -e JUPYTER_GAP_EXECUTABLE=gap \
