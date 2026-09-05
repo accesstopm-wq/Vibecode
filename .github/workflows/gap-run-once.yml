@@ -1,0 +1,41 @@
+name: GAP run once
+
+on:
+  push:
+    paths:
+      - '.github/workflows/gap-run-once.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  run-gap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Run GAP
+        run: |
+          docker pull ghcr.io/gap-system/gap:4.15.1-full
+          cat > /tmp/input.g <<'EOF'
+          G := GL(3,2);;
+          id := IdGroup(G);;
+          H := SmallGroup(id[1], id[2]);;
+          Print("GL(3,2) = ", StructureDescription(G), "\n");
+          Print("IdGroup = ", id, "\n");
+          Print("SmallGroup(168,42) = ", H, "\n");
+          Print("Generators of G: \n", GeneratorsOfGroup(G), "\n");
+          Print("All elements of G: \n", Elements(G), "\n");
+          EOF
+          docker run --rm -v /tmp/input.g:/tmp/input.g ghcr.io/gap-system/gap:4.15.1-full gap -q /tmp/input.g > /tmp/result.txt 2>&1
+          sed -E $'s/\x1B\\[[0-9;]*[[:alpha:]]//g' /tmp/result.txt > gap/result.txt
+          cat gap/result.txt
+      - name: Commit result
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add gap/result.txt
+          git commit -m 'Run GAP previous successful code' || exit 0
+          git push
