@@ -8,7 +8,7 @@ on:
 
 permissions:
   contents: write
-  actions: write
+  actions: read
 
 jobs:
   gap-worker:
@@ -30,12 +30,9 @@ jobs:
             ghcr.io/gap-system/gap:4.15.1-full \
             -f /dev/null
 
-      - name: Install artifact client
-        run: |
-          npm init -y >/dev/null 2>&1
-          npm install @actions/artifact@6 >/dev/null 2>&1
-
       - name: Poll input and run GAP
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           cd "$GITHUB_WORKSPACE"
@@ -48,6 +45,14 @@ jobs:
 
             if [ -n "$sha" ] && [ "$sha" != "$last_sha" ]; then
               echo "New GAP input: $sha"
+
+              # Wait until the previous result has been consumed.
+              while gh api "repos/${GITHUB_REPOSITORY}/contents/gap/result.pending.txt?ref=main" >/dev/null 2>&1; do
+                echo "Waiting for result worker..."
+                sleep 5
+                git fetch origin main --quiet
+              done
+
               git show "origin/main:gap/input.g" > /tmp/input.g
               docker cp /tmp/input.g gap-worker:/tmp/input.g
 
@@ -60,8 +65,16 @@ jobs:
               echo "=== GAP result ==="
               cat "$result"
 
-              RESULT_FILE="$result" RESULT_NAME="gap-result-${n}-${stamp}" node --input-type=module -e "import { DefaultArtifactClient } from '@actions/artifact'; const client = new DefaultArtifactClient(); const r = await client.uploadArtifact(process.env.RESULT_NAME, [process.env.RESULT_FILE], '/tmp', { retentionDays: 1, compressionLevel: 0 }); console.log('Uploaded artifact ' + process.env.RESULT_NAME + ', id=' + r.id + ', size=' + r.size);"
+              content="$(base64 -w 0 "$result")"
+              gh api --method PUT \
+                -H 'Accept: application/vnd.github+json' \
+                -H 'X-GitHub-Api-Version: 2026-03-10' \
+                "repos/${GITHUB_REPOSITORY}/contents/gap/result.pending.txt" \
+                -f message="Stage GAP result ${name:-$n}" \
+                -f content="$content" \
+                -f branch=main >/dev/null
 
+              echo "Result staged for repository worker."
               last_sha="$sha"
             fi
 
@@ -69,44 +82,25 @@ jobs:
           done
 
   commit-worker:
-    name: Artifact -> repository worker
+    name: Result -> repository worker
     runs-on: ubuntu-latest
     timeout-minutes: 350
 
     steps:
-      - name: Poll artifacts and commit results
+      - name: Poll staged results and commit
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          mkdir -p /tmp/gap-results
-          processed=""
 
           while true; do
-            artifacts="$(gh api \
+            if pending="$(gh api \
               -H 'Accept: application/vnd.github+json' \
               -H 'X-GitHub-Api-Version: 2026-03-10' \
-              "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100" \
-              --jq '.artifacts[] | select(.name | startswith("gap-result-")) | [.id,.name,.expired] | @tsv')"
+              "repos/${GITHUB_REPOSITORY}/contents/gap/result.pending.txt?ref=main" \
+              --jq '.content' 2>/dev/null)"; then
 
-            while IFS=$'\t' read -r id name expired; do
-              [ -z "${id:-}" ] && continue
-              [ "$expired" = "true" ] && continue
-              case "|$processed|" in *"|$id|"*) continue;; esac
-
-              echo "Processing artifact $name ($id)"
-              rm -rf /tmp/gap-results/current
-              mkdir -p /tmp/gap-results/current
-              gh api \
-                -H 'Accept: application/vnd.github+json' \
-                -H 'X-GitHub-Api-Version: 2026-03-10' \
-                "repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}/zip" > /tmp/gap-results/artifact.zip
-              unzip -o /tmp/gap-results/artifact.zip -d /tmp/gap-results/current >/dev/null
-
-              result_file="$(find /tmp/gap-results/current -type f | head -n 1)"
-              [ -n "$result_file" ] || { echo 'Artifact has no file'; continue; }
-
-              content="$(base64 -w 0 "$result_file")"
+              content="$(printf '%s' "$pending" | tr -d '\n' | base64 -d | base64 -w 0)"
               existing_sha="$(gh api \
                 -H 'Accept: application/vnd.github+json' \
                 -H 'X-GitHub-Api-Version: 2026-03-10' \
@@ -118,7 +112,7 @@ jobs:
                   -H 'Accept: application/vnd.github+json' \
                   -H 'X-GitHub-Api-Version: 2026-03-10' \
                   "repos/${GITHUB_REPOSITORY}/contents/gap/result.txt" \
-                  -f message="Update GAP result: ${name}" \
+                  -f message="Update GAP result" \
                   -f content="$content" \
                   -f sha="$existing_sha" \
                   -f branch=main >/dev/null
@@ -127,18 +121,27 @@ jobs:
                   -H 'Accept: application/vnd.github+json' \
                   -H 'X-GitHub-Api-Version: 2026-03-10' \
                   "repos/${GITHUB_REPOSITORY}/contents/gap/result.txt" \
-                  -f message="Add GAP result: ${name}" \
+                  -f message="Add GAP result" \
                   -f content="$content" \
                   -f branch=main >/dev/null
               fi
 
-              echo "Committed $name to gap/result.txt"
+              pending_sha="$(gh api \
+                -H 'Accept: application/vnd.github+json' \
+                -H 'X-GitHub-Api-Version: 2026-03-10' \
+                "repos/${GITHUB_REPOSITORY}/contents/gap/result.pending.txt?ref=main" \
+                --jq '.sha')"
+
               gh api --method DELETE \
                 -H 'Accept: application/vnd.github+json' \
                 -H 'X-GitHub-Api-Version: 2026-03-10' \
-                "repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}" >/dev/null || true
-              processed="$processed $id"
-            done <<< "$artifacts"
+                "repos/${GITHUB_REPOSITORY}/contents/gap/result.pending.txt" \
+                -f message="Consume GAP result" \
+                -f sha="$pending_sha" \
+                -f branch=main >/dev/null
+
+              echo "Result committed to gap/result.txt"
+            fi
 
             sleep 10
           done
