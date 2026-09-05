@@ -48,7 +48,7 @@ jobs:
             -e TELEGRAM_BOT_TOKEN="$TELEGRAM_BOT_TOKEN" \
             -v "$GITHUB_WORKSPACE/gap-jupyter:/workspace" \
             ghcr.io/gap-system/jupyter-gap:4.15.0-full \
-            sh -lc 'ln -sf /workspace/save-to-github.py /opt/gap/.local/bin/save-to-github && python3 -m pip install --user --no-cache-dir "jupyterlab==3.6.8" "notebook==6.5.7" "python-telegram-bot" "requests" "yt-dlp" && python3 /workspace/bot.py > /workspace/bot.log 2>&1 & echo $! > /tmp/bot.pid; exec jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --ServerApp.token="$JUPYTER_TOKEN" --ServerApp.root_dir=/workspace --ServerApp.allow_remote_access=True --ServerApp.trust_xheaders=True --ServerApp.allow_origin="*"'
+            sh -lc 'set -e; ln -sf /workspace/save-to-github.py /opt/gap/.local/bin/save-to-github; python3 -m pip install --user --no-cache-dir "jupyterlab==3.6.8" "notebook==6.5.7" "python-telegram-bot" "requests" "yt-dlp"; python3 /workspace/bot.py > /workspace/bot.log 2>&1 & echo $! > /tmp/bot.pid; exec jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --ServerApp.token="$JUPYTER_TOKEN" --ServerApp.root_dir=/workspace --ServerApp.allow_remote_access=True --ServerApp.trust_xheaders=True --ServerApp.allow_origin="*"'
 
           echo "Waiting for JupyterLab and GAP kernel..."
           for i in {1..90}; do
@@ -73,7 +73,7 @@ jobs:
           echo "GAP executable:"
           docker exec gap-jupyter sh -lc 'command -v gap; command -v jupyter-kernel-gap; echo JUPYTER_GAP_EXECUTABLE=$JUPYTER_GAP_EXECUTABLE; command -v save-to-github'
           echo "GAP package check:"
-          docker exec gap-jupyter gap -q -c 'Print(LoadPackage("JupyterKernel"),"\\n"); QUIT;'
+          docker exec gap-jupyter gap -q -c 'Print(LoadPackage("JupyterKernel"),"\n"); QUIT;'
           echo "Telegram bot log:"
           docker exec gap-jupyter sh -lc 'cat /workspace/bot.log 2>/dev/null || true'
 
