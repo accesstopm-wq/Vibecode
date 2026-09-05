@@ -19,6 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/gap-system/gap:4.15.1-bare
+      options: --user 0
 
     steps:
       - uses: actions/checkout@v4
