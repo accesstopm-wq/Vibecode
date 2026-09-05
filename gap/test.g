@@ -1,3 +1,10 @@
 G := GL(3,2);
-Print("GL(3,2) elements:\n");
-Print(Elements(G), "\n");
+id := IdGroup(G);
+H := SmallGroup(Size(G), id);
+Print("GL(3,2) = ", G, "\n");
+Print("IdGroup = ", id, "\n");
+Print("SmallGroup(168, ", id, ") = ", H, "\n");
+Print("Generators:\n");
+Print(GeneratorsOfGroup(H), "\n");
+Print("All elements:\n");
+Print(Elements(H), "\n");
