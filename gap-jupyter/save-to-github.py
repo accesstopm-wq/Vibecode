@@ -10,7 +10,7 @@ from urllib.request import Request, urlopen
 TOKEN = os.environ.get("GITHUB_TOKEN")
 REPO = os.environ.get("GITHUB_REPOSITORY")
 BRANCH = os.environ.get("GITHUB_REF_NAME", "main")
-ROOT = Path("/workspace/notebooks")
+ROOT = Path("/workspace")
 
 if not TOKEN or not REPO:
     raise SystemExit("Save to GitHub is not configured: missing GITHUB_TOKEN or GITHUB_REPOSITORY")
@@ -37,14 +37,13 @@ def request(method, url, data=None):
         raise SystemExit(f"GitHub API error {e.code}: {payload}")
 
 
-files = sorted(ROOT.rglob("*.ipynb"))
+files = sorted(ROOT.glob("*.ipynb"))
 if not files:
-    raise SystemExit("No .ipynb notebooks found in /workspace/notebooks")
+    raise SystemExit("No .ipynb notebooks found in /workspace")
 
 saved = 0
 for path in files:
-    rel = path.relative_to(Path("/workspace")).as_posix()
-    repo_path = f"gap-jupyter/{path.relative_to(ROOT).as_posix()}"
+    repo_path = f"gap-jupyter/{path.name}"
     content = path.read_bytes()
     encoded = base64.b64encode(content).decode()
 
