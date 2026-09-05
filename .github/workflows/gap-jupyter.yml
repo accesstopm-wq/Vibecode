@@ -31,7 +31,7 @@ jobs:
             -p 127.0.0.1:8888:8888 \
             -e JUPYTER_TOKEN="$JUPYTER_TOKEN" \
             -v "$GITHUB_WORKSPACE/gap-jupyter/notebooks:/workspace" \
-            ghcr.io/gap-system/gap:4.16.0-jupyter-gap \
+            ghcr.io/gap-system/gap:4.15.1-jupyter-gap \
             jupyter lab \
               --ip=0.0.0.0 \
               --port=8888 \
