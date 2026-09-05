@@ -1,9 +1,9 @@
 G := GL(3,2);
 id := IdGroup(G);
-H := SmallGroup(Size(G), id);
+H := SmallGroup(id[1], id[2]);
 Print("GL(3,2) = ", G, "\n");
 Print("IdGroup = ", id, "\n");
-Print("SmallGroup(168, ", id, ") = ", H, "\n");
+Print("SmallGroup(", id[1], ", ", id[2], ") = ", H, "\n");
 Print("Generators:\n");
 Print(GeneratorsOfGroup(H), "\n");
 Print("All elements:\n");
