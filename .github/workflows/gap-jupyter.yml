@@ -40,7 +40,7 @@ jobs:
             -e GITHUB_REF_NAME="$GITHUB_REF_NAME" \
             -v "$GITHUB_WORKSPACE/gap-jupyter:/workspace" \
             ghcr.io/gap-system/jupyter-gap:4.15.0-full \
-            sh -lc 'chmod +x /workspace/save-to-github.py && ln -sf /workspace/save-to-github.py /opt/gap/.local/bin/save-to-github && python3 -m pip install --user --no-cache-dir "jupyterlab==3.6.8" "notebook==6.5.7" && exec jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --ServerApp.token="$JUPYTER_TOKEN" --ServerApp.root_dir=/workspace/notebooks --ServerApp.allow_remote_access=True --ServerApp.trust_xheaders=True --ServerApp.allow_origin="*"'
+            sh -lc 'ln -sf /workspace/save-to-github.py /opt/gap/.local/bin/save-to-github && python3 -m pip install --user --no-cache-dir "jupyterlab==3.6.8" "notebook==6.5.7" && exec jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --ServerApp.token="$JUPYTER_TOKEN" --ServerApp.root_dir=/workspace/notebooks --ServerApp.allow_remote_access=True --ServerApp.trust_xheaders=True --ServerApp.allow_origin="*"'
 
           echo "Waiting for JupyterLab and GAP kernel..."
           for i in {1..90}; do
