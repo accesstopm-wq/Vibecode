@@ -1,0 +1,102 @@
+name: GAP JupyterLab
+
+on:
+  workflow_dispatch:
+
+jobs:
+  jupyter:
+    name: Interactive GAP JupyterLab
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Prepare workspace
+        run: mkdir -p "$GITHUB_WORKSPACE/gap-jupyter/notebooks"
+
+      - name: Pull GAP + JupyterLab image
+        run: docker pull ghcr.io/gap-system/jupyter-gap:4.15.0-full
+
+      - name: Start GAP JupyterLab
+        env:
+          JUPYTER_TOKEN: ${{ github.run_id }}-${{ github.run_attempt }}-gap
+        run: |
+          docker rm -f gap-jupyter 2>/dev/null || true
+          docker run -d \
+            --name gap-jupyter \
+            -p 127.0.0.1:8888:8888 \
+            -e JUPYTER_TOKEN="$JUPYTER_TOKEN" \
+            -v "$GITHUB_WORKSPACE/gap-jupyter/notebooks:/workspace" \
+            ghcr.io/gap-system/jupyter-gap:4.15.0-full \
+            jupyter lab \
+              --ip=0.0.0.0 \
+              --port=8888 \
+              --no-browser \
+              --ServerApp.token="$JUPYTER_TOKEN" \
+              --ServerApp.root_dir=/workspace
+
+          echo "Waiting for JupyterLab..."
+          for i in {1..60}; do
+            if curl -fsS http://127.0.0.1:8888/lab >/dev/null 2>&1; then
+              echo "JupyterLab is ready."
+              break
+            fi
+            if [ "$i" -eq 60 ]; then
+              echo "JupyterLab failed to start."
+              docker logs gap-jupyter || true
+              exit 1
+            fi
+            sleep 2
+          done
+
+      - name: Install cloudflared
+        run: |
+          curl -L --fail --retry 3 \
+            -o cloudflared \
+            https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+          chmod +x cloudflared
+
+      - name: Start Cloudflare tunnel
+        env:
+          JUPYTER_TOKEN: ${{ github.run_id }}-${{ github.run_attempt }}-gap
+        run: |
+          nohup ./cloudflared tunnel --url http://127.0.0.1:8888 > tunnel.log 2>&1 &
+          TUNNEL_PID=$!
+
+          URL=""
+          for i in {1..60}; do
+            URL=$(grep -oE 'https://[-a-zA-Z0-9]+\.trycloudflare\.com' tunnel.log | head -1 || true)
+            if [ -n "$URL" ]; then
+              break
+            fi
+            sleep 2
+          done
+
+          if [ -z "$URL" ]; then
+            echo "Cloudflare tunnel failed to start."
+            cat tunnel.log
+            exit 1
+          fi
+
+          echo "============================================================"
+          echo "GAP JUPYTERLAB IS READY"
+          echo "JUPYTER_URL: ${URL}/lab?token=${JUPYTER_TOKEN}"
+          echo "============================================================"
+          echo "TUNNEL_PID=$TUNNEL_PID" >> "$GITHUB_ENV"
+
+      - name: Keep JupyterLab alive
+        run: |
+          echo "JupyterLab will remain available until the GitHub-hosted runner limit."
+          while kill -0 "$TUNNEL_PID" 2>/dev/null; do
+            if ! docker ps --format '{{.Names}}' | grep -qx 'gap-jupyter'; then
+              echo "Jupyter container stopped."
+              docker logs gap-jupyter || true
+              exit 1
+            fi
+            sleep 30
+          done
+          echo "Cloudflare tunnel stopped."
+          docker logs gap-jupyter || true
+          exit 1
