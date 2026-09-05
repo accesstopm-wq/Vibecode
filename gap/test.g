@@ -1,2 +1,3 @@
 G := GL(3,2);
-Elements(G)
+Print("GL(3,2) elements:\n");
+Print(Elements(G), "\n");
