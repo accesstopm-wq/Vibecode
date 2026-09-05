@@ -28,8 +28,10 @@ jobs:
           docker rm -f gap-jupyter 2>/dev/null || true
           docker run -d \
             --name gap-jupyter \
+            --user root \
             -p 127.0.0.1:8888:8888 \
             -e JUPYTER_TOKEN="$JUPYTER_TOKEN" \
+            -e JUPYTER_GAP_EXECUTABLE=gap \
             -v "$GITHUB_WORKSPACE/gap-jupyter/notebooks:/workspace" \
             ghcr.io/gap-system/jupyter-gap:4.15.0-full \
             jupyter lab \
@@ -57,6 +59,47 @@ jobs:
           docker ps --filter name=gap-jupyter
           echo "Jupyter kernels:"
           docker exec gap-jupyter jupyter kernelspec list || true
+          echo "GAP executable:"
+          docker exec gap-jupyter sh -lc 'command -v gap; command -v jupyter-kernel-gap; echo JUPYTER_GAP_EXECUTABLE=$JUPYTER_GAP_EXECUTABLE'
+          echo "GAP package check:"
+          docker exec gap-jupyter gap -q -c 'Print(LoadPackage("JupyterKernel"),"\\n"); QUIT;'
+
+      - name: Test GAP kernel end-to-end
+        run: |
+          docker exec -i gap-jupyter python3 - <<'PY'
+          from jupyter_client import KernelManager
+
+          km = KernelManager(kernel_name="gap-4")
+          km.start_kernel(cwd="/workspace")
+          kc = km.client()
+          kc.start_channels()
+          try:
+              kc.wait_for_ready(timeout=30)
+              msg_id = kc.execute("2+2;")
+              got_result = False
+              while True:
+                  msg = kc.get_iopub_msg(timeout=30)
+                  if msg["parent_header"].get("msg_id") != msg_id:
+                      continue
+                  typ = msg["msg_type"]
+                  content = msg["content"]
+                  if typ == "execute_result":
+                      print("GAP EXECUTE_RESULT:", content["data"])
+                      got_result = True
+                  elif typ == "stream":
+                      print("GAP STREAM:", content["text"], end="")
+                  elif typ == "error":
+                      print("GAP ERROR:", content["ename"], content["evalue"])
+                      raise SystemExit(1)
+                  elif typ == "status" and content["execution_state"] == "idle":
+                      break
+              if not got_result:
+                  raise RuntimeError("GAP kernel reached idle without an execute_result")
+              print("GAP KERNEL TEST: OK")
+          finally:
+              kc.stop_channels()
+              km.shutdown_kernel(now=True)
+          PY
 
       - name: Install cloudflared
         run: |
