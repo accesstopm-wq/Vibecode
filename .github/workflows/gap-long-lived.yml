@@ -44,12 +44,8 @@ jobs:
               git show "origin/main:gap/input.g" > /tmp/input.g
               docker cp /tmp/input.g gap-worker:/tmp/input.g
               n=$((n + 1))
-              stamp="$(date -u +%Y%m%dT%H%M%SZ)"
-              result="/tmp/gap-result-${n}-${stamp}.txt"
-              docker exec gap-worker gap -q /tmp/input.g > /tmp/current-result.txt 2>&1
-              cp /tmp/current-result.txt "$result"
-              cat "$result"
-              content="$(base64 -w 0 "$result")"
+              docker exec gap-worker gap -q /tmp/input.g > /tmp/current-result.txt 2>&1 || true
+              content="$(base64 -w 0 /tmp/current-result.txt)"
               gh api --method PUT -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2026-03-10' "repos/${GITHUB_REPOSITORY}/contents/gap/result.pending.txt" -f message="Stage GAP result ${n}" -f content="$content" -f branch=main >/dev/null
               last_sha="$sha"
             fi
