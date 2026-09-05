@@ -1,6 +1,9 @@
 name: Long-lived GAP workers
 
 on:
+  push:
+    paths:
+      - '.github/workflows/gap-long-lived.yml'
   workflow_dispatch:
 
 permissions:
