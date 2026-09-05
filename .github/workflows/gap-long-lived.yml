@@ -1,0 +1,151 @@
+name: Long-lived GAP workers
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  gap-worker:
+    name: GAP worker
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Start persistent GAP container
+        run: |
+          docker pull ghcr.io/gap-system/gap:4.15.1-full
+          docker run -d --name gap-worker \
+            --entrypoint tail \
+            ghcr.io/gap-system/gap:4.15.1-full \
+            -f /dev/null
+
+      - name: Install artifact client
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install @actions/artifact@6 >/dev/null 2>&1
+
+      - name: Poll input and run GAP
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          last_sha=""
+          n=0
+
+          while true; do
+            git fetch origin main --quiet
+            sha="$(git rev-parse origin/main:gap/input.g 2>/dev/null || true)"
+
+            if [ -n "$sha" ] && [ "$sha" != "$last_sha" ]; then
+              echo "New GAP input: $sha"
+              git show "origin/main:gap/input.g" > /tmp/input.g
+              docker cp /tmp/input.g gap-worker:/tmp/input.g
+
+              n=$((n + 1))
+              stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+              result="/tmp/gap-result-${n}-${stamp}.txt"
+
+              docker exec gap-worker gap -q /tmp/input.g > /tmp/current-result.txt
+              cp /tmp/current-result.txt "$result"
+              echo "=== GAP result ==="
+              cat "$result"
+
+              RESULT_FILE="$result" RESULT_NAME="gap-result-${n}-${stamp}" node --input-type=module <<'NODE'
+              import { DefaultArtifactClient } from '@actions/artifact';
+              const client = new DefaultArtifactClient();
+              const file = process.env.RESULT_FILE;
+              const name = process.env.RESULT_NAME;
+              const response = await client.uploadArtifact(name, [file], '/tmp', { retentionDays: 1, compressionLevel: 0 });
+              console.log(`Uploaded artifact ${name}, id=${response.id}, size=${response.size}`);
+              NODE
+
+              last_sha="$sha"
+            fi
+
+            sleep 10
+          done
+
+  commit-worker:
+    name: Artifact -> repository worker
+    needs: gap-worker
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+
+    steps:
+      - name: Poll artifacts and commit results
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/gap-results
+          processed=""
+
+          while true; do
+            artifacts="$(gh api \
+              -H 'Accept: application/vnd.github+json' \
+              -H 'X-GitHub-Api-Version: 2026-03-10' \
+              "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100" \
+              --jq '.artifacts[] | select(.name | startswith("gap-result-")) | [.id,.name,.expired] | @tsv')"
+
+            while IFS=$'\t' read -r id name expired; do
+              [ -z "${id:-}" ] && continue
+              [ "$expired" = "true" ] && continue
+              case "|$processed|" in *"|$id|"*) continue;; esac
+
+              echo "Processing artifact $name ($id)"
+              rm -rf /tmp/gap-results/current
+              mkdir -p /tmp/gap-results/current
+              gh api \
+                -H 'Accept: application/vnd.github+json' \
+                -H 'X-GitHub-Api-Version: 2026-03-10' \
+                "repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}/zip" > /tmp/gap-results/artifact.zip
+              unzip -o /tmp/gap-results/artifact.zip -d /tmp/gap-results/current >/dev/null
+
+              result_file="$(find /tmp/gap-results/current -type f | head -n 1)"
+              [ -n "$result_file" ] || { echo 'Artifact has no file'; continue; }
+
+              content="$(base64 -w 0 "$result_file")"
+              existing_sha="$(gh api \
+                -H 'Accept: application/vnd.github+json' \
+                -H 'X-GitHub-Api-Version: 2026-03-10' \
+                "repos/${GITHUB_REPOSITORY}/contents/gap/result.txt?ref=main" \
+                --jq '.sha' 2>/dev/null || true)"
+
+              if [ -n "$existing_sha" ]; then
+                gh api --method PUT \
+                  -H 'Accept: application/vnd.github+json' \
+                  -H 'X-GitHub-Api-Version: 2026-03-10' \
+                  "repos/${GITHUB_REPOSITORY}/contents/gap/result.txt" \
+                  -f message="Update GAP result: ${name}" \
+                  -f content="$content" \
+                  -f sha="$existing_sha" \
+                  -f branch=main >/dev/null
+              else
+                gh api --method PUT \
+                  -H 'Accept: application/vnd.github+json' \
+                  -H 'X-GitHub-Api-Version: 2026-03-10' \
+                  "repos/${GITHUB_REPOSITORY}/contents/gap/result.txt" \
+                  -f message="Add GAP result: ${name}" \
+                  -f content="$content" \
+                  -f branch=main >/dev/null
+              fi
+
+              echo "Committed $name to gap/result.txt"
+              gh api --method DELETE \
+                -H 'Accept: application/vnd.github+json' \
+                -H 'X-GitHub-Api-Version: 2026-03-10' \
+                "repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}" >/dev/null || true
+              processed="$processed $id"
+            done <<< "$artifacts"
+
+            sleep 10
+          done
