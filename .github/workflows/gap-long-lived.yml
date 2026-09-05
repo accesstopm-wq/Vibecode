@@ -1,5 +1,9 @@
 name: Long-lived GAP workers
 
+concurrency:
+  group: gap-long-lived
+  cancel-in-progress: true
+
 on:
   push:
     paths:
@@ -15,21 +19,15 @@ jobs:
     name: GAP worker
     runs-on: ubuntu-latest
     timeout-minutes: 350
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
       - name: Start persistent GAP container
         run: |
           docker pull ghcr.io/gap-system/gap:4.15.1-full
-          docker run -d --name gap-worker \
-            --entrypoint tail \
-            ghcr.io/gap-system/gap:4.15.1-full \
-            -f /dev/null
-
+          docker run -d --name gap-worker --entrypoint tail ghcr.io/gap-system/gap:4.15.1-full -f /dev/null
       - name: Poll input and run GAP
         env:
           GH_TOKEN: ${{ github.token }}
@@ -38,46 +36,23 @@ jobs:
           cd "$GITHUB_WORKSPACE"
           last_sha=""
           n=0
-
           while true; do
             git fetch origin main --quiet
             sha="$(git rev-parse origin/main:gap/input.g 2>/dev/null || true)"
-
             if [ -n "$sha" ] && [ "$sha" != "$last_sha" ]; then
-              echo "New GAP input: $sha"
-
-              # Wait until the previous result has been consumed.
-              while gh api "repos/${GITHUB_REPOSITORY}/contents/gap/result.pending.txt?ref=main" >/dev/null 2>&1; do
-                echo "Waiting for result worker..."
-                sleep 5
-                git fetch origin main --quiet
-              done
-
+              while gh api "repos/${GITHUB_REPOSITORY}/contents/gap/result.pending.txt?ref=main" >/dev/null 2>&1; do sleep 5; done
               git show "origin/main:gap/input.g" > /tmp/input.g
               docker cp /tmp/input.g gap-worker:/tmp/input.g
-
               n=$((n + 1))
               stamp="$(date -u +%Y%m%dT%H%M%SZ)"
               result="/tmp/gap-result-${n}-${stamp}.txt"
-
-              docker exec gap-worker gap -q /tmp/input.g > /tmp/current-result.txt
+              docker exec gap-worker gap -q /tmp/input.g > /tmp/current-result.txt 2>&1
               cp /tmp/current-result.txt "$result"
-              echo "=== GAP result ==="
               cat "$result"
-
               content="$(base64 -w 0 "$result")"
-              gh api --method PUT \
-                -H 'Accept: application/vnd.github+json' \
-                -H 'X-GitHub-Api-Version: 2026-03-10' \
-                "repos/${GITHUB_REPOSITORY}/contents/gap/result.pending.txt" \
-                -f message="Stage GAP result ${name:-$n}" \
-                -f content="$content" \
-                -f branch=main >/dev/null
-
-              echo "Result staged for repository worker."
+              gh api --method PUT -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2026-03-10' "repos/${GITHUB_REPOSITORY}/contents/gap/result.pending.txt" -f message="Stage GAP result ${n}" -f content="$content" -f branch=main >/dev/null
               last_sha="$sha"
             fi
-
             sleep 10
           done
 
@@ -85,63 +60,23 @@ jobs:
     name: Result -> repository worker
     runs-on: ubuntu-latest
     timeout-minutes: 350
-
     steps:
       - name: Poll staged results and commit
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-
           while true; do
-            if pending="$(gh api \
-              -H 'Accept: application/vnd.github+json' \
-              -H 'X-GitHub-Api-Version: 2026-03-10' \
-              "repos/${GITHUB_REPOSITORY}/contents/gap/result.pending.txt?ref=main" \
-              --jq '.content' 2>/dev/null)"; then
-
+            if pending="$(gh api -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2026-03-10' "repos/${GITHUB_REPOSITORY}/contents/gap/result.pending.txt?ref=main" --jq '.content' 2>/dev/null)"; then
               content="$(printf '%s' "$pending" | tr -d '\n' | base64 -d | base64 -w 0)"
-              existing_sha="$(gh api \
-                -H 'Accept: application/vnd.github+json' \
-                -H 'X-GitHub-Api-Version: 2026-03-10' \
-                "repos/${GITHUB_REPOSITORY}/contents/gap/result.txt?ref=main" \
-                --jq '.sha' 2>/dev/null || true)"
-
+              existing_sha="$(gh api -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2026-03-10' "repos/${GITHUB_REPOSITORY}/contents/gap/result.txt?ref=main" --jq '.sha' 2>/dev/null || true)"
               if [ -n "$existing_sha" ]; then
-                gh api --method PUT \
-                  -H 'Accept: application/vnd.github+json' \
-                  -H 'X-GitHub-Api-Version: 2026-03-10' \
-                  "repos/${GITHUB_REPOSITORY}/contents/gap/result.txt" \
-                  -f message="Update GAP result" \
-                  -f content="$content" \
-                  -f sha="$existing_sha" \
-                  -f branch=main >/dev/null
+                gh api --method PUT -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2026-03-10' "repos/${GITHUB_REPOSITORY}/contents/gap/result.txt" -f message="Update GAP result" -f content="$content" -f sha="$existing_sha" -f branch=main >/dev/null
               else
-                gh api --method PUT \
-                  -H 'Accept: application/vnd.github+json' \
-                  -H 'X-GitHub-Api-Version: 2026-03-10' \
-                  "repos/${GITHUB_REPOSITORY}/contents/gap/result.txt" \
-                  -f message="Add GAP result" \
-                  -f content="$content" \
-                  -f branch=main >/dev/null
+                gh api --method PUT -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2026-03-10' "repos/${GITHUB_REPOSITORY}/contents/gap/result.txt" -f message="Add GAP result" -f content="$content" -f branch=main >/dev/null
               fi
-
-              pending_sha="$(gh api \
-                -H 'Accept: application/vnd.github+json' \
-                -H 'X-GitHub-Api-Version: 2026-03-10' \
-                "repos/${GITHUB_REPOSITORY}/contents/gap/result.pending.txt?ref=main" \
-                --jq '.sha')"
-
-              gh api --method DELETE \
-                -H 'Accept: application/vnd.github+json' \
-                -H 'X-GitHub-Api-Version: 2026-03-10' \
-                "repos/${GITHUB_REPOSITORY}/contents/gap/result.pending.txt" \
-                -f message="Consume GAP result" \
-                -f sha="$pending_sha" \
-                -f branch=main >/dev/null
-
-              echo "Result committed to gap/result.txt"
+              pending_sha="$(gh api -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2026-03-10' "repos/${GITHUB_REPOSITORY}/contents/gap/result.pending.txt?ref=main" --jq '.sha')"
+              gh api --method DELETE -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2026-03-10' "repos/${GITHUB_REPOSITORY}/contents/gap/result.pending.txt" -f message="Consume GAP result" -f sha="$pending_sha" -f branch=main >/dev/null
             fi
-
             sleep 10
           done
