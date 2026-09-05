@@ -13,29 +13,36 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-
       - uses: android-actions/setup-android@v3
-
       - name: Set up Gradle with cache
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
           cache-read-only: false
-
       - name: Build APK
         run: gradle --no-daemon --build-cache --configuration-cache assembleDebug
         working-directory: minesweeper
-
+      - name: Sign APK
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -e
+          echo "$KEYSTORE_BASE64" | base64 -d > signing.jks
+          APK="minesweeper/app/build/outputs/apk/debug/app-debug.apk"
+          apksigner sign --ks signing.jks --ks-key-alias "$KEY_ALIAS" --ks-pass "pass:$KEYSTORE_PASSWORD" --key-pass "pass:$KEY_PASSWORD" "$APK"
+          apksigner verify --verbose "$APK"
+          rm -f signing.jks
       - uses: actions/upload-artifact@v4
         with:
-          name: minesweeper-debug-apk
+          name: minesweeper-release-apk
           path: minesweeper/app/build/outputs/apk/debug/app-debug.apk
-
       - name: Publish APK release
         uses: softprops/action-gh-release@v2
         with:
