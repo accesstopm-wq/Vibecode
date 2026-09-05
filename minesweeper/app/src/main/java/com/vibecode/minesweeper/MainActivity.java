@@ -48,18 +48,18 @@ public class MainActivity extends Activity {
         Button restart = button("↻");
         zoomText = new TextView(this);
         zoomText.setText("100%");
-        zoomText.setTextSize(18);
+        zoomText.setTextSize(20);
         zoomText.setTextColor(Color.BLACK);
         zoomText.setGravity(Gravity.CENTER);
         zoomText.setPadding(10, 0, 10, 0);
 
-        toolbar.addView(mode, toolLp(82));
-        toolbar.addView(easy, toolLp(92));
-        toolbar.addView(medium, toolLp(104));
-        toolbar.addView(hard, toolLp(104));
-        toolbar.addView(restart, toolLp(82));
-        toolbar.addView(zoomText, toolLp(92));
-        root.addView(toolbarScroll, new LinearLayout.LayoutParams(-1, 82));
+        toolbar.addView(mode, toolLp(108));
+        toolbar.addView(easy, toolLp(116));
+        toolbar.addView(medium, toolLp(132));
+        toolbar.addView(hard, toolLp(132));
+        toolbar.addView(restart, toolLp(108));
+        toolbar.addView(zoomText, toolLp(108));
+        root.addView(toolbarScroll, new LinearLayout.LayoutParams(-1, 98));
 
         board = new Board(this);
 
@@ -96,7 +96,7 @@ public class MainActivity extends Activity {
     Button button(String text) {
         Button b = new Button(this);
         b.setText(text);
-        b.setTextSize(19);
+        b.setTextSize(21);
         b.setMinHeight(0);
         b.setMinWidth(0);
         b.setMinimumHeight(0);
@@ -107,8 +107,8 @@ public class MainActivity extends Activity {
     }
 
     LinearLayout.LayoutParams toolLp(int width) {
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(width, 72);
-        p.setMargins(3, 1, 3, 1);
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(width, 88);
+        p.setMargins(4, 2, 4, 2);
         return p;
     }
 
@@ -404,26 +404,32 @@ public class MainActivity extends Activity {
             if (lost || won || !inside(x, y) || !open[y][x] || number[y][x] <= 0) return;
 
             int flags = 0;
+            ArrayList<int[]> covered = new ArrayList<>();
             for (int yy = y - 1; yy <= y + 1; yy++) {
                 for (int xx = x - 1; xx <= x + 1; xx++) {
-                    if (inside(xx, yy) && marked[yy][xx]) flags++;
+                    if (!inside(xx, yy)) continue;
+                    if (marked[yy][xx]) flags++;
+                    else if (!open[yy][xx]) covered.add(new int[]{xx, yy});
                 }
             }
 
+            int needed = number[y][x] - flags;
+            if (needed < 0) return;
+
+            // If every remaining covered neighbour must be a mine, flag them all.
+            // This is generic: it works for 1, 2, 3, edges and corners alike.
+            if (needed == covered.size() && needed > 0) {
+                for (int[] target : covered) {
+                    marked[target[1]][target[0]] = true;
+                    flagCount++;
+                }
+                return;
+            }
+
+            // Normal chord: with the required number of flags already present,
+            // reveal every other covered neighbour.
             if (flags != number[y][x]) return;
-
-            // First collect all still-covered, unflagged neighbours.
-            // This makes chord behavior identical for corners, edges and the center.
-            ArrayList<int[]> targets = new ArrayList<>();
-            for (int yy = y - 1; yy <= y + 1; yy++) {
-                for (int xx = x - 1; xx <= x + 1; xx++) {
-                    if (inside(xx, yy) && !open[yy][xx] && !marked[yy][xx]) {
-                        targets.add(new int[]{xx, yy});
-                    }
-                }
-            }
-
-            for (int[] target : targets) {
+            for (int[] target : covered) {
                 reveal(target[0], target[1]);
                 if (lost) return;
             }
