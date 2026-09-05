@@ -2,6 +2,12 @@ name: GAP JupyterLab
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "0 0,6,12,18 * * *"
+
+concurrency:
+  group: gap-jupyter
+  cancel-in-progress: true
 
 permissions:
   contents: write
@@ -24,10 +30,11 @@ jobs:
       - name: Pull GAP + JupyterLab image
         run: docker pull ghcr.io/gap-system/jupyter-gap:4.15.0-full
 
-      - name: Start GAP JupyterLab
+      - name: Start GAP JupyterLab and Telegram bot
         env:
           JUPYTER_TOKEN: ${{ github.run_id }}-${{ github.run_attempt }}-gap
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         run: |
           docker rm -f gap-jupyter 2>/dev/null || true
           docker run -d \
@@ -38,9 +45,10 @@ jobs:
             -e GITHUB_TOKEN="$GITHUB_TOKEN" \
             -e GITHUB_REPOSITORY="$GITHUB_REPOSITORY" \
             -e GITHUB_REF_NAME="$GITHUB_REF_NAME" \
+            -e TELEGRAM_BOT_TOKEN="$TELEGRAM_BOT_TOKEN" \
             -v "$GITHUB_WORKSPACE/gap-jupyter:/workspace" \
             ghcr.io/gap-system/jupyter-gap:4.15.0-full \
-            sh -lc 'ln -sf /workspace/save-to-github.py /opt/gap/.local/bin/save-to-github && python3 -m pip install --user --no-cache-dir "jupyterlab==3.6.8" "notebook==6.5.7" && exec jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --ServerApp.token="$JUPYTER_TOKEN" --ServerApp.root_dir=/workspace --ServerApp.allow_remote_access=True --ServerApp.trust_xheaders=True --ServerApp.allow_origin="*"'
+            sh -lc 'ln -sf /workspace/save-to-github.py /opt/gap/.local/bin/save-to-github && python3 -m pip install --user --no-cache-dir "jupyterlab==3.6.8" "notebook==6.5.7" "python-telegram-bot" "requests" "yt-dlp" && python3 /workspace/bot.py > /workspace/bot.log 2>&1 & echo $! > /tmp/bot.pid; exec jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --ServerApp.token="$JUPYTER_TOKEN" --ServerApp.root_dir=/workspace --ServerApp.allow_remote_access=True --ServerApp.trust_xheaders=True --ServerApp.allow_origin="*"'
 
           echo "Waiting for JupyterLab and GAP kernel..."
           for i in {1..90}; do
@@ -66,6 +74,8 @@ jobs:
           docker exec gap-jupyter sh -lc 'command -v gap; command -v jupyter-kernel-gap; echo JUPYTER_GAP_EXECUTABLE=$JUPYTER_GAP_EXECUTABLE; command -v save-to-github'
           echo "GAP package check:"
           docker exec gap-jupyter gap -q -c 'Print(LoadPackage("JupyterKernel"),"\\n"); QUIT;'
+          echo "Telegram bot log:"
+          docker exec gap-jupyter sh -lc 'cat /workspace/bot.log 2>/dev/null || true'
 
       - name: Test GAP kernel end-to-end
         run: |
@@ -141,7 +151,7 @@ jobs:
 
       - name: Keep JupyterLab alive
         run: |
-          echo "JupyterLab will remain available until the GitHub-hosted runner limit."
+          echo "JupyterLab and Telegram bot will remain available until the GitHub-hosted runner limit."
           while kill -0 "$TUNNEL_PID" 2>/dev/null; do
             if ! docker ps --format '{{.Names}}' | grep -qx 'gap-jupyter'; then
               echo "Jupyter container stopped."
