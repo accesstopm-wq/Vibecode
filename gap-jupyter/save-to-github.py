@@ -10,7 +10,7 @@ from urllib.request import Request, urlopen
 TOKEN = os.environ.get("GITHUB_TOKEN")
 REPO = os.environ.get("GITHUB_REPOSITORY")
 BRANCH = os.environ.get("GITHUB_REF_NAME", "main")
-ROOT = Path("/workspace")
+ROOT = Path("/workspace/notebooks")
 
 if not TOKEN or not REPO:
     raise SystemExit("Save to GitHub is not configured: missing GITHUB_TOKEN or GITHUB_REPOSITORY")
@@ -39,22 +39,21 @@ def request(method, url, data=None):
 
 files = sorted(ROOT.rglob("*.ipynb"))
 if not files:
-    raise SystemExit("No .ipynb notebooks found in /workspace")
+    raise SystemExit("No .ipynb notebooks found in /workspace/notebooks")
 
 saved = 0
 for path in files:
-    rel = path.relative_to(ROOT).as_posix()
+    rel = path.relative_to(Path("/workspace")).as_posix()
+    repo_path = f"gap-jupyter/{path.relative_to(ROOT).as_posix()}"
     content = path.read_bytes()
     encoded = base64.b64encode(content).decode()
 
-    # GitHub's Contents API returns a git blob SHA. Calculate the same SHA locally
-    # so unchanged notebooks do not create unnecessary commits.
     blob_sha = hashlib.sha1(b"blob %d\0" % len(content) + content).hexdigest()
-    status, remote = request("GET", f"{API}/{rel}?ref={BRANCH}")
+    status, remote = request("GET", f"{API}/{repo_path}?ref={BRANCH}")
     remote_sha = remote.get("sha") if remote else None
 
     if remote_sha == blob_sha:
-        print(f"UNCHANGED  {rel}")
+        print(f"UNCHANGED  {repo_path}")
         continue
 
     payload = {
@@ -65,8 +64,8 @@ for path in files:
     if remote_sha:
         payload["sha"] = remote_sha
 
-    request("PUT", f"{API}/{rel}", payload)
-    print(f"SAVED      {rel}")
+    request("PUT", f"{API}/{repo_path}", payload)
+    print(f"SAVED      {repo_path}")
     saved += 1
 
 print(f"Done. {saved} notebook(s) saved to {REPO}:{BRANCH}.")
