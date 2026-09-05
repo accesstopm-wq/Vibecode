@@ -33,8 +33,6 @@ jobs:
           npm install @actions/artifact@6 >/dev/null 2>&1
 
       - name: Poll input and run GAP
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           cd "$GITHUB_WORKSPACE"
@@ -76,7 +74,6 @@ jobs:
 
   commit-worker:
     name: Artifact -> repository worker
-    needs: gap-worker
     runs-on: ubuntu-latest
     timeout-minutes: 350
 
