@@ -27,16 +27,29 @@ jobs:
       - name: Run GAP
         run: gap -q "${GITHUB_WORKSPACE}/gap/test.g" > "${GITHUB_WORKSPACE}/gap/result.txt"
 
-      - name: Commit generated result
-        run: |
-          git -C "${GITHUB_WORKSPACE}" config user.name "github-actions[bot]"
-          git -C "${GITHUB_WORKSPACE}" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git -C "${GITHUB_WORKSPACE}" add gap/result.txt
-          git -C "${GITHUB_WORKSPACE}" diff --cached --quiet || git -C "${GITHUB_WORKSPACE}" commit -m "Update GAP result"
-          git -C "${GITHUB_WORKSPACE}" push
-
       - name: Upload result
         uses: actions/upload-artifact@v4
         with:
           name: gap-result
           path: ${{ github.workspace }}/gap/result.txt
+
+  commit-result:
+    needs: gap
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download result
+        uses: actions/download-artifact@v4
+        with:
+          name: gap-result
+          path: gap
+
+      - name: Commit generated result
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add gap/result.txt
+          git diff --cached --quiet || git commit -m "Update GAP result"
+          git push
