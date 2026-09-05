@@ -18,16 +18,18 @@ jobs:
   gap:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/gap-system/gap:4.15.1-bare
+      image: ghcr.io/gap-system/gap:4.15.1-full
       options: --user 0
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Run GAP
+        working-directory: ${{ github.workspace }}
         run: gap -q gap/test.g > gap/result.txt
 
       - name: Commit generated result
+        working-directory: ${{ github.workspace }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
