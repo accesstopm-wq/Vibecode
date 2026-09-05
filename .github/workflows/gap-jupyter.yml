@@ -33,23 +33,15 @@ jobs:
             -e JUPYTER_GAP_EXECUTABLE=gap \
             -v "$GITHUB_WORKSPACE/gap-jupyter/notebooks:/workspace" \
             ghcr.io/gap-system/jupyter-gap:4.15.0-full \
-            jupyter lab \
-              --ip=0.0.0.0 \
-              --port=8888 \
-              --no-browser \
-              --ServerApp.token="$JUPYTER_TOKEN" \
-              --ServerApp.root_dir=/workspace \
-              --ServerApp.allow_remote_access=True \
-              --ServerApp.trust_xheaders=True \
-              --ServerApp.allow_origin='*'
+            sh -lc 'python3 -m pip install --user --no-cache-dir "jupyterlab==3.6.8" "notebook==6.5.7" && exec jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --ServerApp.token="$JUPYTER_TOKEN" --ServerApp.root_dir=/workspace --ServerApp.allow_remote_access=True --ServerApp.trust_xheaders=True --ServerApp.allow_origin="*"'
 
           echo "Waiting for JupyterLab and GAP kernel..."
-          for i in {1..60}; do
+          for i in {1..90}; do
             if curl -fsS http://127.0.0.1:8888/lab >/dev/null 2>&1; then
               echo "JupyterLab is ready."
               break
             fi
-            if [ "$i" -eq 60 ]; then
+            if [ "$i" -eq 90 ]; then
               echo "JupyterLab failed to start."
               docker logs gap-jupyter || true
               exit 1
@@ -57,6 +49,8 @@ jobs:
             sleep 2
           done
 
+          echo "Jupyter versions:"
+          docker exec gap-jupyter python3 -c 'import jupyterlab, notebook; print("JupyterLab", jupyterlab.__version__); print("Notebook", notebook.__version__)'
           echo "Container status:"
           docker ps --filter name=gap-jupyter
           echo "Jupyter kernels:"
