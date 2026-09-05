@@ -12,10 +12,8 @@ public class MainActivity extends Activity {
     Board board;
     HorizontalScrollView horizontal;
     ScrollView vertical;
-    TextView zoomText;
-    TextView mineCounter;
+    TextView zoomText, mineCounter;
     Button smileButton;
-
     static final int BASE_CELL = 128;
 
     @Override public void onCreate(Bundle savedInstanceState) {
@@ -24,7 +22,7 @@ public class MainActivity extends Activity {
         getWindow().setNavigationBarColor(Color.rgb(192, 192, 192));
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
 
-        final LinearLayout root = new LinearLayout(this);
+        LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.rgb(192, 192, 192));
         root.setOnApplyWindowInsetsListener((v, insets) -> {
@@ -50,11 +48,9 @@ public class MainActivity extends Activity {
         mineCounter = counter();
         smileButton = button("🙂");
         zoomText = new TextView(this);
-        zoomText.setText("100%");
         zoomText.setTextSize(22);
         zoomText.setTextColor(Color.BLACK);
         zoomText.setGravity(Gravity.CENTER);
-        zoomText.setPadding(10, 0, 10, 0);
 
         toolbar.addView(mode, toolLp(162));
         toolbar.addView(easy, toolLp(174));
@@ -66,12 +62,10 @@ public class MainActivity extends Activity {
         root.addView(toolbarScroll, new LinearLayout.LayoutParams(-1, 142));
 
         board = new Board(this);
-
         vertical = new ScrollView(this);
         vertical.setFillViewport(false);
         vertical.setClipToPadding(false);
         vertical.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);
-
         horizontal = new HorizontalScrollView(this);
         horizontal.setFillViewport(false);
         horizontal.setClipToPadding(false);
@@ -89,7 +83,6 @@ public class MainActivity extends Activity {
         medium.setOnClickListener(v -> board.newGame(16, 16, 40));
         hard.setOnClickListener(v -> board.newGame(30, 16, 99));
         smileButton.setOnClickListener(v -> board.newGame(board.w, board.h, board.mines));
-
         board.newGame(9, 9, 10);
     }
 
@@ -125,7 +118,6 @@ public class MainActivity extends Activity {
         t.setTextSize(24);
         t.setTextColor(Color.BLACK);
         t.setGravity(Gravity.CENTER);
-        t.setPadding(10, 0, 10, 0);
         t.setBackgroundColor(Color.rgb(160, 160, 160));
         return t;
     }
@@ -137,18 +129,16 @@ public class MainActivity extends Activity {
     }
 
     class Board extends View {
-        int w = 9, h = 9, mines = 10, cell = BASE_CELL, flagCount = 0;
+        int w = 9, h = 9, mines = 10, cell = BASE_CELL, flagCount;
         boolean flagMode, lost, won, minesGenerated;
         boolean[][] mine, open, marked;
         int[][] number;
-        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
-        Random random = new Random();
+        final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        final Random random = new Random();
         ScaleGestureDetector scaleDetector;
         float downX, downY;
         boolean moved, scaling;
-        final float MIN_CELL = 64f;
-        final float MAX_CELL = 256f;
-        final float TOUCH_SLOP = 18f;
+        final float MIN_CELL = 64f, MAX_CELL = 256f, TOUCH_SLOP = 18f;
 
         Board(Context context) {
             super(context);
@@ -157,39 +147,31 @@ public class MainActivity extends Activity {
             setFocusable(true);
             setClickable(true);
             scaleDetector = new ScaleGestureDetector(context, new ScaleGestureDetector.SimpleOnScaleGestureListener() {
-                @Override public boolean onScaleBegin(ScaleGestureDetector detector) {
+                @Override public boolean onScaleBegin(ScaleGestureDetector d) {
                     scaling = true;
                     moved = true;
                     requestDisallowParentIntercept(true);
                     return true;
                 }
-
-                @Override public boolean onScale(ScaleGestureDetector detector) {
+                @Override public boolean onScale(ScaleGestureDetector d) {
                     float oldCell = cell;
-                    float newCell = Math.max(MIN_CELL, Math.min(MAX_CELL, oldCell * detector.getScaleFactor()));
+                    float newCell = Math.max(MIN_CELL, Math.min(MAX_CELL, oldCell * d.getScaleFactor()));
                     if (Math.abs(newCell - oldCell) < 0.5f) return true;
-
-                    float fx = detector.getFocusX();
-                    float fy = detector.getFocusY();
+                    float fx = d.getFocusX(), fy = d.getFocusY();
                     final float contentX = horizontal.getScrollX() + fx;
                     final float contentY = vertical.getScrollY() + fy;
                     final float ratio = newCell / oldCell;
-
                     cell = Math.round(newCell);
                     requestLayout();
                     invalidate();
                     updateZoomText();
-
                     post(() -> {
-                        int sx = Math.round(contentX * ratio - fx);
-                        int sy = Math.round(contentY * ratio - fy);
-                        horizontal.scrollTo(Math.max(0, sx), horizontal.getScrollY());
-                        vertical.scrollTo(vertical.getScrollX(), Math.max(0, sy));
+                        horizontal.scrollTo(Math.max(0, Math.round(contentX * ratio - fx)), horizontal.getScrollY());
+                        vertical.scrollTo(vertical.getScrollX(), Math.max(0, Math.round(contentY * ratio - fy)));
                     });
                     return true;
                 }
-
-                @Override public void onScaleEnd(ScaleGestureDetector detector) {
+                @Override public void onScaleEnd(ScaleGestureDetector d) {
                     scaling = false;
                     requestDisallowParentIntercept(false);
                 }
@@ -197,17 +179,13 @@ public class MainActivity extends Activity {
         }
 
         void requestDisallowParentIntercept(boolean disallow) {
-            getParent().requestDisallowInterceptTouchEvent(disallow);
+            ViewParent parent = getParent();
+            if (parent != null) parent.requestDisallowInterceptTouchEvent(disallow);
         }
 
         void newGame(int W, int H, int M) {
-            w = W;
-            h = H;
-            mines = M;
-            flagCount = 0;
-            lost = false;
-            won = false;
-            minesGenerated = false;
+            w = W; h = H; mines = M; flagCount = 0;
+            lost = false; won = false; minesGenerated = false;
             mine = new boolean[h][w];
             open = new boolean[h][w];
             marked = new boolean[h][w];
@@ -216,27 +194,23 @@ public class MainActivity extends Activity {
             invalidate();
             updateMineCounter();
             updateSmiley();
+            updateZoomText();
         }
 
         void generateMines(int safeX, int safeY) {
-            for (int k = 0; k < mines;) {
-                int x = random.nextInt(w);
-                int y = random.nextInt(h);
+            int generated = 0;
+            while (generated < mines) {
+                int x = random.nextInt(w), y = random.nextInt(h);
                 if ((x == safeX && y == safeY) || mine[y][x]) continue;
                 mine[y][x] = true;
-                k++;
+                generated++;
             }
-
-            for (int y = 0; y < h; y++) {
-                for (int x = 0; x < w; x++) {
-                    int count = 0;
-                    for (int yy = y - 1; yy <= y + 1; yy++) {
-                        for (int xx = x - 1; xx <= x + 1; xx++) {
-                            if (inside(xx, yy) && mine[yy][xx]) count++;
-                        }
-                    }
-                    number[y][x] = count;
-                }
+            for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
+                int count = 0;
+                for (int yy = y - 1; yy <= y + 1; yy++)
+                    for (int xx = x - 1; xx <= x + 1; xx++)
+                        if (inside(xx, yy) && mine[yy][xx]) count++;
+                number[y][x] = count;
             }
             minesGenerated = true;
         }
@@ -252,232 +226,130 @@ public class MainActivity extends Activity {
         @Override protected void onDraw(Canvas c) {
             super.onDraw(c);
             p.setTextAlign(Paint.Align.CENTER);
-            for (int y = 0; y < h; y++) {
-                for (int x = 0; x < w; x++) {
-                    float l = x * cell, t = y * cell, r = l + cell, b = t + cell;
-                    if (open[y][x]) drawOpenCell(c, l, t, r, b);
-                    else drawClosedCell(c, l, t, r, b);
-
-                    if (marked[y][x]) drawFlag(c, l, t);
-                    else if (open[y][x] && mine[y][x]) drawMine(c, l, t);
-                    else if (open[y][x] && number[y][x] > 0) drawNumber(c, l, t, number[y][x]);
-                }
+            for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
+                float l = x * cell, t = y * cell, r = l + cell, b = t + cell;
+                if (open[y][x]) drawOpenCell(c, l, t, r, b);
+                else drawClosedCell(c, l, t, r, b);
+                if (marked[y][x]) drawFlag(c, l, t);
+                else if (open[y][x] && mine[y][x]) drawMine(c, l, t);
+                else if (open[y][x] && number[y][x] > 0) drawNumber(c, l, t, number[y][x]);
             }
         }
 
         void drawOpenCell(Canvas c, float l, float t, float r, float b) {
-            p.setStyle(Paint.Style.FILL);
-            p.setColor(Color.rgb(195, 195, 195));
-            c.drawRect(l, t, r, b, p);
-            p.setStyle(Paint.Style.STROKE);
-            p.setStrokeWidth(1);
-            p.setColor(Color.rgb(125, 125, 125));
-            c.drawRect(l, t, r, b, p);
+            p.setStyle(Paint.Style.FILL); p.setColor(Color.rgb(195, 195, 195)); c.drawRect(l, t, r, b, p);
+            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1); p.setColor(Color.rgb(125, 125, 125)); c.drawRect(l, t, r, b, p);
         }
 
         void drawClosedCell(Canvas c, float l, float t, float r, float b) {
-            p.setStyle(Paint.Style.FILL);
-            p.setColor(Color.rgb(192, 192, 192));
-            c.drawRect(l, t, r, b, p);
-            p.setStyle(Paint.Style.STROKE);
-            p.setStrokeWidth(Math.max(3, cell / 16f));
-            p.setColor(Color.WHITE);
-            c.drawLine(l + 2, b - 2, l + 2, t + 2, p);
-            c.drawLine(l + 2, t + 2, r - 2, t + 2, p);
-            p.setColor(Color.rgb(128, 128, 128));
-            c.drawLine(r - 2, t + 2, r - 2, b - 2, p);
-            c.drawLine(r - 2, b - 2, l + 2, b - 2, p);
+            p.setStyle(Paint.Style.FILL); p.setColor(Color.rgb(192, 192, 192)); c.drawRect(l, t, r, b, p);
+            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(Math.max(3, cell / 16f)); p.setColor(Color.WHITE);
+            c.drawLine(l + 2, b - 2, l + 2, t + 2, p); c.drawLine(l + 2, t + 2, r - 2, t + 2, p);
+            p.setColor(Color.rgb(128, 128, 128)); c.drawLine(r - 2, t + 2, r - 2, b - 2, p); c.drawLine(r - 2, b - 2, l + 2, b - 2, p);
             p.setStyle(Paint.Style.FILL);
         }
 
         void drawNumber(Canvas c, float l, float t, int n) {
-            int[] colors = {Color.TRANSPARENT, Color.BLUE, Color.rgb(0,128,0), Color.RED,
-                    Color.rgb(0,0,128), Color.rgb(128,0,0), Color.rgb(0,128,128), Color.BLACK, Color.GRAY};
-            p.setStyle(Paint.Style.FILL);
-            p.setColor(colors[Math.min(n, 8)]);
-            p.setTextSize(cell * 0.58f);
-            c.drawText(String.valueOf(n), l + cell / 2f, t + cell * 0.72f, p);
+            int[] colors = {Color.TRANSPARENT, Color.BLUE, Color.rgb(0,128,0), Color.RED, Color.rgb(0,0,128), Color.rgb(128,0,0), Color.rgb(0,128,128), Color.BLACK, Color.GRAY};
+            p.setStyle(Paint.Style.FILL); p.setColor(colors[Math.min(n, 8)]); p.setTextSize(cell * .58f);
+            c.drawText(String.valueOf(n), l + cell / 2f, t + cell * .72f, p);
         }
 
         void drawFlag(Canvas c, float l, float t) {
-            float cx = l + cell * .47f;
-            float base = t + cell * .78f;
-            p.setStyle(Paint.Style.STROKE);
-            p.setStrokeWidth(Math.max(3, cell * .055f));
-            p.setColor(Color.BLACK);
-            c.drawLine(cx, t + cell * .20f, cx, base, p);
-            c.drawLine(l + cell * .25f, base, l + cell * .72f, base, p);
-            p.setStyle(Paint.Style.FILL);
-            p.setColor(Color.RED);
-            Path flag = new Path();
-            flag.moveTo(cx, t + cell * .20f);
-            flag.lineTo(l + cell * .78f, t + cell * .36f);
-            flag.lineTo(cx, t + cell * .54f);
-            flag.close();
-            c.drawPath(flag, p);
+            float cx = l + cell * .47f, base = t + cell * .78f;
+            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(Math.max(3, cell * .055f)); p.setColor(Color.BLACK);
+            c.drawLine(cx, t + cell * .20f, cx, base, p); c.drawLine(l + cell * .25f, base, l + cell * .72f, base, p);
+            p.setStyle(Paint.Style.FILL); p.setColor(Color.RED);
+            Path flag = new Path(); flag.moveTo(cx, t + cell * .20f); flag.lineTo(l + cell * .78f, t + cell * .36f); flag.lineTo(cx, t + cell * .54f); flag.close(); c.drawPath(flag, p);
         }
 
         void drawMine(Canvas c, float l, float t) {
             float cx = l + cell / 2f, cy = t + cell / 2f, rad = cell * .22f;
-            p.setStyle(Paint.Style.STROKE);
-            p.setStrokeWidth(Math.max(3, cell * .045f));
-            p.setColor(Color.BLACK);
+            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(Math.max(3, cell * .045f)); p.setColor(Color.BLACK);
             for (int i = 0; i < 8; i++) {
                 double a = i * Math.PI / 4;
-                c.drawLine(cx + (float)Math.cos(a)*rad*.55f, cy + (float)Math.sin(a)*rad*.55f,
-                        cx + (float)Math.cos(a)*rad*1.45f, cy + (float)Math.sin(a)*rad*1.45f, p);
+                c.drawLine(cx + (float)Math.cos(a) * rad * .55f, cy + (float)Math.sin(a) * rad * .55f,
+                        cx + (float)Math.cos(a) * rad * 1.45f, cy + (float)Math.sin(a) * rad * 1.45f, p);
             }
-            p.setStyle(Paint.Style.FILL);
-            p.setColor(Color.RED);
-            c.drawCircle(cx, cy, rad, p);
-            p.setColor(Color.WHITE);
-            c.drawCircle(cx - rad*.35f, cy - rad*.35f, rad*.22f, p);
+            p.setStyle(Paint.Style.FILL); p.setColor(Color.RED); c.drawCircle(cx, cy, rad, p);
+            p.setColor(Color.WHITE); c.drawCircle(cx - rad * .35f, cy - rad * .35f, rad * .22f, p);
         }
 
         @Override public boolean onTouchEvent(MotionEvent e) {
             scaleDetector.onTouchEvent(e);
-
             switch (e.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
-                    downX = e.getX();
-                    downY = e.getY();
-                    moved = false;
-                    scaling = false;
-                    return true;
-
+                    downX = e.getX(); downY = e.getY(); moved = false; scaling = false; return true;
                 case MotionEvent.ACTION_POINTER_DOWN:
-                    moved = true;
-                    requestDisallowParentIntercept(true);
-                    return true;
-
+                    moved = true; requestDisallowParentIntercept(true); return true;
                 case MotionEvent.ACTION_MOVE:
-                    if (e.getPointerCount() > 1 || scaling) {
-                        moved = true;
-                        return true;
-                    }
-                    if (Math.abs(e.getX() - downX) > TOUCH_SLOP || Math.abs(e.getY() - downY) > TOUCH_SLOP) {
-                        moved = true;
-                    }
+                    if (e.getPointerCount() > 1 || scaling) { moved = true; return true; }
+                    if (Math.abs(e.getX() - downX) > TOUCH_SLOP || Math.abs(e.getY() - downY) > TOUCH_SLOP) moved = true;
                     return true;
-
-                case MotionEvent.ACTION_POINTER_UP:
-                    return true;
-
+                case MotionEvent.ACTION_POINTER_UP: return true;
                 case MotionEvent.ACTION_CANCEL:
-                    requestDisallowParentIntercept(false);
-                    scaling = false;
-                    return true;
-
+                    requestDisallowParentIntercept(false); scaling = false; return true;
                 case MotionEvent.ACTION_UP:
                     requestDisallowParentIntercept(false);
                     if (moved || scaling || lost || won) return true;
-
-                    int x = (int)(e.getX() / cell);
-                    int y = (int)(e.getY() / cell);
+                    int x = (int)(e.getX() / cell), y = (int)(e.getY() / cell);
                     if (!inside(x, y)) return true;
-
-                    if (open[y][x] && number[y][x] > 0) {
-                        chord(x, y);
-                    } else if (flagMode) {
-                        toggleFlag(x, y);
-                    } else if (!open[y][x]) {
+                    if (open[y][x] && number[y][x] > 0) chord(x, y);
+                    else if (flagMode) toggleFlag(x, y);
+                    else if (!open[y][x]) {
                         if (!minesGenerated) generateMines(x, y);
                         reveal(x, y);
                     }
-                    checkWin();
-                    updateMineCounter();
-                    updateSmiley();
-                    invalidate();
-                    performClick();
-                    return true;
+                    checkWin(); updateMineCounter(); updateSmiley(); invalidate(); performClick(); return true;
             }
             return true;
         }
 
-        @Override public boolean performClick() {
-            super.performClick();
-            return true;
-        }
+        @Override public boolean performClick() { super.performClick(); return true; }
 
         void toggleFlag(int x, int y) {
-            if (lost || won || open[y][x]) return;
-            if (marked[y][x]) {
-                marked[y][x] = false;
-                flagCount--;
-            } else if (flagCount < mines) {
-                marked[y][x] = true;
-                flagCount++;
-            }
+            if (open[y][x]) return;
+            if (marked[y][x]) { marked[y][x] = false; flagCount--; }
+            else if (flagCount < mines) { marked[y][x] = true; flagCount++; }
         }
 
         void reveal(int x, int y) {
             if (lost || won || !inside(x, y) || open[y][x] || marked[y][x]) return;
             open[y][x] = true;
-            if (mine[y][x]) {
-                lost = true;
-                for (int yy = 0; yy < h; yy++) {
-                    for (int xx = 0; xx < w; xx++) {
-                        if (mine[yy][xx]) open[yy][xx] = true;
-                    }
-                }
-                return;
-            }
-            if (number[y][x] == 0) {
-                for (int yy = y - 1; yy <= y + 1; yy++) {
-                    for (int xx = x - 1; xx <= x + 1; xx++) {
-                        if (inside(xx, yy) && (xx != x || yy != y)) reveal(xx, yy);
-                    }
-                }
-            }
+            if (mine[y][x]) { lose(); return; }
+            if (number[y][x] != 0) return;
+            for (int yy = y - 1; yy <= y + 1; yy++)
+                for (int xx = x - 1; xx <= x + 1; xx++)
+                    if (inside(xx, yy) && (xx != x || yy != y)) reveal(xx, yy);
         }
 
         void chord(int x, int y) {
-            if (lost || won || !inside(x, y) || !open[y][x] || number[y][x] <= 0) return;
-
             int flags = 0;
             ArrayList<int[]> covered = new ArrayList<>();
-            for (int yy = y - 1; yy <= y + 1; yy++) {
-                for (int xx = x - 1; xx <= x + 1; xx++) {
-                    if (!inside(xx, yy)) continue;
-                    if (marked[yy][xx]) flags++;
-                    else if (!open[yy][xx]) covered.add(new int[]{xx, yy});
-                }
+            for (int yy = y - 1; yy <= y + 1; yy++) for (int xx = x - 1; xx <= x + 1; xx++) {
+                if (!inside(xx, yy) || (xx == x && yy == y)) continue;
+                if (marked[yy][xx]) flags++;
+                else if (!open[yy][xx]) covered.add(new int[]{xx, yy});
             }
-
             int needed = number[y][x] - flags;
             if (needed < 0) return;
-
             if (needed == covered.size() && needed > 0) {
-                for (int[] target : covered) {
-                    marked[target[1]][target[0]] = true;
-                    flagCount++;
-                }
+                for (int[] q : covered) { marked[q[1]][q[0]] = true; flagCount++; }
                 return;
             }
-
             if (flags != number[y][x]) return;
-            for (int[] target : covered) {
-                reveal(target[0], target[1]);
-                if (lost) return;
-            }
+            for (int[] q : covered) { reveal(q[0], q[1]); if (lost) return; }
+        }
+
+        void lose() {
+            lost = true;
+            for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) if (mine[y][x]) open[y][x] = true;
         }
 
         void checkWin() {
-            if (lost || won) return;
-            for (int y = 0; y < h; y++) {
-                for (int x = 0; x < w; x++) {
-                    if (!mine[y][x] && !open[y][x]) return;
-                }
-            }
+            if (lost) return;
+            for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) if (!mine[y][x] && !open[y][x]) return;
             won = true;
-            for (int y = 0; y < h; y++) {
-                for (int x = 0; x < w; x++) {
-                    if (mine[y][x] && !marked[y][x]) {
-                        marked[y][x] = true;
-                        flagCount++;
-                    }
-                }
-            }
         }
     }
 }
