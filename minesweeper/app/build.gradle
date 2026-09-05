@@ -1,5 +1,5 @@
 plugins { id 'com.android.application' }
 
 android { namespace 'com.vibecode.minesweeper'; compileSdk 35
-    defaultConfig { applicationId 'com.vibecode.minesweeper'; minSdk 23; targetSdk 35; versionCode 9; versionName '1.305' }
+    defaultConfig { applicationId 'com.vibecode.minesweeper'; minSdk 23; targetSdk 35; versionCode 10; versionName '1.306' }
 }
