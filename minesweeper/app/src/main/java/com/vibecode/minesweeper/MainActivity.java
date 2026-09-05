@@ -13,6 +13,8 @@ public class MainActivity extends Activity {
     HorizontalScrollView horizontal;
     ScrollView vertical;
     TextView zoomText;
+    TextView mineCounter;
+    Button smileButton;
 
     static final int BASE_CELL = 128;
 
@@ -34,7 +36,7 @@ public class MainActivity extends Activity {
         LinearLayout toolbar = new LinearLayout(this);
         toolbar.setOrientation(LinearLayout.HORIZONTAL);
         toolbar.setGravity(Gravity.CENTER_VERTICAL);
-        toolbar.setPadding(4, 4, 4, 4);
+        toolbar.setPadding(5, 5, 5, 5);
 
         HorizontalScrollView toolbarScroll = new HorizontalScrollView(this);
         toolbarScroll.setHorizontalScrollBarEnabled(false);
@@ -45,21 +47,23 @@ public class MainActivity extends Activity {
         Button easy = button("9×9");
         Button medium = button("16×16");
         Button hard = button("30×16");
-        Button restart = button("↻");
+        mineCounter = counter();
+        smileButton = button("🙂");
         zoomText = new TextView(this);
         zoomText.setText("100%");
-        zoomText.setTextSize(20);
+        zoomText.setTextSize(22);
         zoomText.setTextColor(Color.BLACK);
         zoomText.setGravity(Gravity.CENTER);
         zoomText.setPadding(10, 0, 10, 0);
 
-        toolbar.addView(mode, toolLp(108));
-        toolbar.addView(easy, toolLp(116));
-        toolbar.addView(medium, toolLp(132));
-        toolbar.addView(hard, toolLp(132));
-        toolbar.addView(restart, toolLp(108));
-        toolbar.addView(zoomText, toolLp(108));
-        root.addView(toolbarScroll, new LinearLayout.LayoutParams(-1, 98));
+        toolbar.addView(mode, toolLp(162));
+        toolbar.addView(easy, toolLp(174));
+        toolbar.addView(medium, toolLp(198));
+        toolbar.addView(hard, toolLp(198));
+        toolbar.addView(mineCounter, toolLp(162));
+        toolbar.addView(smileButton, toolLp(162));
+        toolbar.addView(zoomText, toolLp(162));
+        root.addView(toolbarScroll, new LinearLayout.LayoutParams(-1, 142));
 
         board = new Board(this);
 
@@ -84,7 +88,7 @@ public class MainActivity extends Activity {
         easy.setOnClickListener(v -> board.newGame(9, 9, 10));
         medium.setOnClickListener(v -> board.newGame(16, 16, 40));
         hard.setOnClickListener(v -> board.newGame(30, 16, 99));
-        restart.setOnClickListener(v -> board.newGame(board.w, board.h, board.mines));
+        smileButton.setOnClickListener(v -> board.newGame(board.w, board.h, board.mines));
 
         board.newGame(9, 9, 10);
     }
@@ -93,10 +97,20 @@ public class MainActivity extends Activity {
         zoomText.setText(Math.round(board.cell * 100f / BASE_CELL) + "%");
     }
 
+    void updateMineCounter() {
+        mineCounter.setText("💣 " + Math.max(0, board.mines - board.flagCount));
+    }
+
+    void updateSmiley() {
+        if (board.lost) smileButton.setText("😵");
+        else if (board.won) smileButton.setText("😎");
+        else smileButton.setText("🙂");
+    }
+
     Button button(String text) {
         Button b = new Button(this);
         b.setText(text);
-        b.setTextSize(21);
+        b.setTextSize(25);
         b.setMinHeight(0);
         b.setMinWidth(0);
         b.setMinimumHeight(0);
@@ -106,15 +120,25 @@ public class MainActivity extends Activity {
         return b;
     }
 
+    TextView counter() {
+        TextView t = new TextView(this);
+        t.setTextSize(24);
+        t.setTextColor(Color.BLACK);
+        t.setGravity(Gravity.CENTER);
+        t.setPadding(10, 0, 10, 0);
+        t.setBackgroundColor(Color.rgb(160, 160, 160));
+        return t;
+    }
+
     LinearLayout.LayoutParams toolLp(int width) {
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(width, 88);
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(width, 132);
         p.setMargins(4, 2, 4, 2);
         return p;
     }
 
     class Board extends View {
         int w = 9, h = 9, mines = 10, cell = BASE_CELL, flagCount = 0;
-        boolean flagMode, lost, won;
+        boolean flagMode, lost, won, minesGenerated;
         boolean[][] mine, open, marked;
         int[][] number;
         Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -183,18 +207,24 @@ public class MainActivity extends Activity {
             flagCount = 0;
             lost = false;
             won = false;
+            minesGenerated = false;
             mine = new boolean[h][w];
             open = new boolean[h][w];
             marked = new boolean[h][w];
             number = new int[h][w];
+            requestLayout();
+            invalidate();
+            updateMineCounter();
+            updateSmiley();
+        }
 
-            for (int k = 0; k < M;) {
+        void generateMines(int safeX, int safeY) {
+            for (int k = 0; k < mines;) {
                 int x = random.nextInt(w);
                 int y = random.nextInt(h);
-                if (!mine[y][x]) {
-                    mine[y][x] = true;
-                    k++;
-                }
+                if ((x == safeX && y == safeY) || mine[y][x]) continue;
+                mine[y][x] = true;
+                k++;
             }
 
             for (int y = 0; y < h; y++) {
@@ -208,9 +238,7 @@ public class MainActivity extends Activity {
                     number[y][x] = count;
                 }
             }
-
-            requestLayout();
-            invalidate();
+            minesGenerated = true;
         }
 
         boolean inside(int x, int y) {
@@ -353,9 +381,12 @@ public class MainActivity extends Activity {
                     } else if (flagMode) {
                         toggleFlag(x, y);
                     } else if (!open[y][x]) {
+                        if (!minesGenerated) generateMines(x, y);
                         reveal(x, y);
                     }
                     checkWin();
+                    updateMineCounter();
+                    updateSmiley();
                     invalidate();
                     performClick();
                     return true;
@@ -416,8 +447,6 @@ public class MainActivity extends Activity {
             int needed = number[y][x] - flags;
             if (needed < 0) return;
 
-            // If every remaining covered neighbour must be a mine, flag them all.
-            // This is generic: it works for 1, 2, 3, edges and corners alike.
             if (needed == covered.size() && needed > 0) {
                 for (int[] target : covered) {
                     marked[target[1]][target[0]] = true;
@@ -426,8 +455,6 @@ public class MainActivity extends Activity {
                 return;
             }
 
-            // Normal chord: with the required number of flags already present,
-            // reveal every other covered neighbour.
             if (flags != number[y][x]) return;
             for (int[] target : covered) {
                 reveal(target[0], target[1]);
