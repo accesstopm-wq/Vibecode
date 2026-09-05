@@ -18,7 +18,7 @@ jobs:
   gap:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/gap-system/gap:4.15.1-full
+      image: ghcr.io/gap-system/gap:4.15.1-slim
       options: --user 0
 
     steps:
