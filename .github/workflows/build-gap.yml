@@ -18,7 +18,8 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Run GAP
-        run: gap -q "${GITHUB_WORKSPACE}/gap/test.g"
+        run: |
+          gap -q "${GITHUB_WORKSPACE}/gap/test.g" | tee "${GITHUB_WORKSPACE}/gap/result.txt"
 
       - name: Upload result
         uses: actions/upload-artifact@v4
