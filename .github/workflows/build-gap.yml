@@ -7,6 +7,10 @@ on:
       - '.github/workflows/build-gap.yml'
   workflow_dispatch:
 
+permissions:
+  contents: write
+  actions: read
+
 jobs:
   gap:
     runs-on: ubuntu-latest
@@ -26,3 +30,30 @@ jobs:
         with:
           name: gap-result
           path: ${{ github.workspace }}/gap/result.txt
+
+  commit-result:
+    needs: gap
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download result
+        uses: actions/download-artifact@v4
+        with:
+          name: gap-result
+          path: result
+
+      - name: Commit result via API
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          CONTENT=$(base64 -w 0 result/result.txt)
+          SHA=$(curl -fsSL \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/contents/gap/result.txt" | jq -r '.sha')
+          curl -fsSL -X PUT \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/contents/gap/result.txt" \
+            -d "$(jq -n --arg msg "Update GAP result" --arg content "$CONTENT" --arg sha "$SHA" '{message:$msg,content:$content,sha:$sha,branch:"main"}')"
