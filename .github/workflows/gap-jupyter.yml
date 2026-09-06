@@ -148,12 +148,12 @@ jobs:
           echo "============================================================"
           echo "TUNNEL_PID=$TUNNEL_PID" >> "$GITHUB_ENV"
 
-      - name: Queue next restart in 30 minutes
+      - name: Queue next restart in 5 hours
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           nohup bash -c '
-            sleep 1800
+            sleep 18000
             curl -fsS -X POST \
               -H "Accept: application/vnd.github+json" \
               -H "Authorization: Bearer $GH_TOKEN" \
@@ -161,11 +161,11 @@ jobs:
               "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/gap-jupyter.yml/dispatches" \
               -d "{\"ref\":\"main\"}"
           ' >/tmp/next-restart.log 2>&1 &
-          echo "Next GAP run will be dispatched in 30 minutes."
+          echo "Next GAP run will be dispatched in 5 hours."
 
       - name: Keep JupyterLab alive
         run: |
-          echo "JupyterLab and Telegram bot will remain available until the next 30-minute restart."
+          echo "JupyterLab and Telegram bot will remain available until the next 5-hour restart."
           while kill -0 "$TUNNEL_PID" 2>/dev/null; do
             if ! docker ps --format '{{.Names}}' | grep -qx 'gap-jupyter'; then
               echo "Jupyter container stopped."
