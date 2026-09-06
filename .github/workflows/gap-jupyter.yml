@@ -159,7 +159,7 @@ jobs:
               -H "Authorization: Bearer $GH_TOKEN" \
               -H "X-GitHub-Api-Version: 2022-11-28" \
               "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/gap-jupyter.yml/dispatches" \
-              -d '{"ref":"main"}'
+              -d "{\"ref\":\"main\"}"
           ' >/tmp/next-restart.log 2>&1 &
           echo "Next GAP run will be dispatched in 30 minutes."
 
