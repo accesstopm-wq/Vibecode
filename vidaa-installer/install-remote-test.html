@@ -4,42 +4,39 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>VIDAA API Probe</title>
 <style>
-html,body{margin:0;width:100%;height:100%;background:#101114;color:#fff;font-family:Arial,sans-serif}body{display:flex;align-items:center;justify-content:center}.box{width:90%;max-width:1100px;text-align:center}.title{font-size:42px;font-weight:bold;margin-bottom:22px}p{font-size:30px;font-weight:bold;line-height:1.5}#status{margin-top:24px;font-size:22px;white-space:pre-wrap;word-break:break-word;text-align:left;max-height:70vh;overflow:auto;color:#ddd}
+html,body{margin:0;width:100%;height:100%;background:#101114;color:#fff;font-family:Arial,sans-serif}body{display:flex;align-items:center;justify-content:center}.box{width:92%;max-width:1200px;text-align:center}.title{font-size:42px;font-weight:bold;margin-bottom:18px}p{font-size:28px;font-weight:bold}.page{font-size:22px;color:#aaa;margin:14px}.text{font-size:22px;line-height:1.45;white-space:pre-wrap;word-break:break-word;text-align:left;height:68vh;overflow:hidden;background:#181a1f;padding:18px;border-radius:10px}.hint{font-size:20px;color:#aaa;margin-top:12px}
 </style>
 </head>
 <body>
 <div class="box">
 <div class="title">VIDAA API Probe</div>
-<p>НАТИСНИ 5 — ПЕРЕВІРИТИ HiUtils</p>
-<div id="status"></div>
+<p>НАТИСНИ 5 — ЗАПУСТИТИ</p>
+<div id="page" class="page"></div>
+<div id="text" class="text">Очікування...</div>
+<div class="hint">2 — попередня сторінка &nbsp;&nbsp; 8 — наступна</div>
 </div>
 <script>
 (()=>{
- const status=document.getElementById('status');
- const out=[];
- const show=()=>status.textContent=out.join('\n\n');
- const safe=v=>{try{return JSON.stringify(v)}catch(e){return String(v)}};
+ const text=document.getElementById('text'),page=document.getElementById('page');
+ let pages=[],idx=0;
+ const render=()=>{page.textContent=pages.length?'Сторінка '+(idx+1)+' / '+pages.length:'';text.textContent=pages[idx]||'Очікування...'};
+ const makePages=s=>{const n=1200;pages=[];for(let i=0;i<s.length;i+=n)pages.push(s.slice(i,i+n));idx=0;render()};
+ const safe=v=>{try{return JSON.stringify(v,null,2)}catch(e){return String(v)}};
  function run(){
-  out.length=0; show();
-  const req=window.HiUtils_createRequest;
-  out.push('HiUtils_createRequest: '+typeof req);
-  if(typeof req!=='function'){show();return}
-  try{out.push('length: '+req.length);out.push('source:\n'+Function.prototype.toString.call(req).slice(0,1800))}catch(e){out.push('source error: '+e)}
-  const tests=[
-   ['websdk/Appinfo.json',6],
-   ['websdk/Appinfo.json',0],
-   ['websdk/AppInfo.json',6],
-   ['/APPS/websdk/Appinfo.json',6]
-  ];
-  for(const [path,mode] of tests){
-   try{
-    const r=req('fileRead',{path:path,mode:mode});
-    out.push('TEST path='+path+' mode='+mode+'\nRETURN: '+safe(r));
-   }catch(e){out.push('TEST path='+path+' mode='+mode+'\nEXCEPTION: '+String(e))}
+  const out=[];const req=window.HiUtils_createRequest;
+  out.push('=== HiUtils_createRequest DIAGNOSTIC ===');
+  out.push('typeof: '+typeof req);
+  if(typeof req!=='function'){makePages(out.join('\n\n'));return}
+  try{out.push('length: '+req.length)}catch(e){out.push('length ERROR: '+e)}
+  try{out.push('FULL FUNCTION SOURCE:\n'+Function.prototype.toString.call(req))}catch(e){out.push('SOURCE ERROR: '+e)}
+  const tests=[['websdk/Appinfo.json',6],['websdk/Appinfo.json',0],['websdk/AppInfo.json',6],['/APPS/websdk/Appinfo.json',6]];
+  for(let i=0;i<tests.length;i++){
+   const [path,mode]=tests[i];out.push('\n=== fileRead TEST '+(i+1)+' ===');out.push('path: '+path);out.push('mode: '+mode);
+   try{const r=req('fileRead',{path,mode});out.push('RETURN:\n'+safe(r));}catch(e){out.push('EXCEPTION:\n'+String(e));try{out.push('STACK:\n'+e.stack)}catch(_) {}}
   }
-  show();
+  makePages(out.join('\n\n'));
  }
- window.addEventListener('keydown',e=>{if(String(e.key||'')==='5'||e.keyCode===53||e.which===53){e.preventDefault();run()}},true);
+ window.addEventListener('keydown',e=>{const k=String(e.key||'');if(k==='5'||e.keyCode===53||e.which===53){e.preventDefault();run()}else if(k==='2'||e.keyCode===50||e.which===50){if(pages.length){idx=Math.max(0,idx-1);render()}}else if(k==='8'||e.keyCode===56||e.which===56){if(pages.length){idx=Math.min(pages.length-1,idx+1);render()}}},true);
 })();
 </script>
 </body>
