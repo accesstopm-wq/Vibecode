@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>VIDAA Remote Test</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main id="app">
+    <header>
+      <div class="brand">VIDAA TEST</div>
+      <div id="status">↑ ↓ ← → · OK · BACK</div>
+    </header>
+
+    <section class="page active" data-page="home">
+      <h1>Пультовий тест</h1>
+      <p>Перевіряємо навігацію Web App на телевізорі.</p>
+      <div class="grid">
+        <button class="nav focusable" data-target="one">Сторінка 1</button>
+        <button class="nav focusable" data-target="two">Сторінка 2</button>
+        <button class="nav focusable" data-target="three">Сторінка 3</button>
+        <button class="nav focusable" data-target="info">Інформація</button>
+      </div>
+      <div class="hint">OK — відкрити · BACK — повернутися</div>
+    </section>
+
+    <section class="page" data-page="one"><h1>Сторінка 1</h1><p>Фокус переміщується стрілками.</p><button class="focusable back-btn">← Назад</button></section>
+    <section class="page" data-page="two"><h1>Сторінка 2</h1><p>Це друга тестова сторінка.</p><button class="focusable back-btn">← Назад</button></section>
+    <section class="page" data-page="three"><h1>Сторінка 3</h1><p>Це третя тестова сторінка.</p><button class="focusable back-btn">← Назад</button></section>
+    <section class="page" data-page="info"><h1>Інформація</h1><p id="keyInfo">Очікую натискання кнопок пульта…</p><button class="focusable back-btn">← Назад</button></section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
