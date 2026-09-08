@@ -6,14 +6,19 @@
 <title>VIDAA Diagnostic</title>
 <style>
 html,body{margin:0;background:#101114;color:#fff;font-family:Arial,sans-serif}
-#result{padding:28px;white-space:pre-wrap;word-break:break-all;font-size:26px;line-height:1.35}
+#page{padding:22px 28px 8px;font-size:24px;font-weight:bold}
+#result{padding:8px 28px 28px;white-space:pre-wrap;word-break:break-all;font-size:26px;line-height:1.35}
+#hint{position:fixed;bottom:8px;left:28px;color:#aaa;font-size:18px}
 </style>
 </head>
 <body>
+<div id="page">Сторінка 1 з 1</div>
 <pre id="result">Діагностика…</pre>
+<div id="hint">2 — назад · 8 — вперед</div>
 <script>
 (() => {
   const result=document.getElementById('result');
+  const page=document.getElementById('page');
   const tests=[
     {name:'relative',path:'websdk/Appinfo.json',mode:6},
     {name:'without_websdk',path:'Appinfo.json',mode:6},
@@ -50,7 +55,7 @@ html,body{margin:0;background:#101114;color:#fff;font-family:Arial,sans-serif}
   }
 
   const diagnostic={
-    diagnosticVersion:'2026-09-08-1',
+    diagnosticVersion:'2026-09-08-2',
     location:location.href,
     userAgent:navigator.userAgent,
     api:{
@@ -61,7 +66,30 @@ html,body{margin:0;background:#101114;color:#fff;font-family:Arial,sans-serif}
     tests:tests.map(runTest)
   };
 
-  result.textContent=safe(diagnostic);
+  const text=safe(diagnostic);
+  const chunkSize=200;
+  const chunks=[];
+  for(let i=0;i<text.length;i+=chunkSize) chunks.push(text.slice(i,i+chunkSize));
+  let current=0;
+
+  function render(){
+    page.textContent=`Сторінка ${current+1} з ${chunks.length}`;
+    result.textContent=chunks[current]||'';
+  }
+
+  document.addEventListener('keydown',e=>{
+    if(e.key==='2'||e.key==='ArrowUp'){
+      current=Math.max(0,current-1);
+      render();
+      e.preventDefault();
+    }else if(e.key==='8'||e.key==='ArrowDown'){
+      current=Math.min(chunks.length-1,current+1);
+      render();
+      e.preventDefault();
+    }
+  });
+
+  render();
 })();
 </script>
 </body>
