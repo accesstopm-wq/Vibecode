@@ -19,22 +19,19 @@ html,body{margin:0;background:#101114;color:#fff;font-family:Arial,sans-serif}
 (() => {
   const result=document.getElementById('result');
   const page=document.getElementById('page');
-  const tests=[
-    {name:'relative',path:'websdk/Appinfo.json',mode:6},
-    {name:'without_websdk',path:'Appinfo.json',mode:6},
-    {name:'leading_slash',path:'/websdk/Appinfo.json',mode:6}
-  ];
 
   function safe(v){
     try{return JSON.stringify(v,null,2)}catch(e){return String(v)}
   }
 
-  function runTest(t){
-    const out={name:t.name,path:t.path,mode:t.mode};
+  function call(action,params){
+    const out={action,params};
     try{
-      out.apiType=typeof window.HiUtils_createRequest;
-      if(out.apiType!=='function') return Object.assign(out,{error:'HiUtils_createRequest is not a function'});
-      const r=window.HiUtils_createRequest('fileRead',{path:t.path,mode:t.mode});
+      if(typeof window.HiUtils_createRequest!=='function'){
+        out.error='HiUtils_createRequest is not a function';
+        return out;
+      }
+      const r=window.HiUtils_createRequest(action,params||{});
       out.result=r;
       out.ret=r&&r.ret;
       out.sdkVersion=r&&r.sdkVersion;
@@ -54,16 +51,41 @@ html,body{margin:0;background:#101114;color:#fff;font-family:Arial,sans-serif}
     return out;
   }
 
+  const tests=[];
+
+  // Read-only filesystem probes. No fileWrite is executed.
+  const paths=[
+    'websdk/Appinfo.json',
+    'Appinfo.json',
+    '/websdk/Appinfo.json',
+    'index.html',
+    'websdk',
+    'websdk/appinfo.json'
+  ];
+  for(const path of paths) tests.push(call('fileRead',{path,mode:6}));
+
+  // Check whether the result depends on the mode value.
+  for(const mode of [0,1,2,4,6]){
+    tests.push(call('fileRead',{path:'websdk/Appinfo.json',mode}));
+  }
+
+  const ownNames=Object.getOwnPropertyNames(window)
+    .filter(n=>/^HiUtils|^Hisense/i.test(n))
+    .sort();
+
   const diagnostic={
-    diagnosticVersion:'2026-09-08-2',
+    diagnosticVersion:'2026-09-08-3',
     location:location.href,
     userAgent:navigator.userAgent,
     api:{
       HiUtils_createRequest:typeof window.HiUtils_createRequest,
       Hisense_FileRead:typeof window.Hisense_FileRead,
-      Hisense_FileWrite:typeof window.Hisense_FileWrite
+      Hisense_FileWrite:typeof window.Hisense_FileWrite,
+      Hisense_installApp:typeof window.Hisense_installApp,
+      Hisense_uninstallApp:typeof window.Hisense_uninstallApp,
+      exposedHiHisenseNames:ownNames
     },
-    tests:tests.map(runTest)
+    tests
   };
 
   const text=safe(diagnostic);
