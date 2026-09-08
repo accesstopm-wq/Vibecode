@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>VIDAA Remote Test</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#050505;color:#fff;font-family:Arial,sans-serif}body{display:flex;align-items:center;justify-content:center}.wrap{width:min(92vw,900px);text-align:center}.title{font-size:clamp(28px,5vw,52px);margin-bottom:10px}.status{font-size:clamp(18px,3vw,30px);min-height:1.4em;margin-bottom:18px}.pad{display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-rows:110px 110px 110px;gap:10px;max-width:620px;margin:0 auto 18px}.key{border:3px solid #777;border-radius:18px;background:#171717;color:#fff;font-size:38px;font-weight:700;display:flex;align-items:center;justify-content:center}.key.active{background:#fff;color:#000;border-color:#fff}.up{grid-column:2}.left{grid-column:1;grid-row:2}.ok{grid-column:2;grid-row:2;font-size:30px}.right{grid-column:3;grid-row:2}.down{grid-column:2;grid-row:3}.info{font-size:16px;color:#aaa;line-height:1.5}.log{height:150px;overflow:auto;text-align:left;background:#101010;border:1px solid #333;border-radius:10px;padding:10px;font-family:monospace;font-size:14px}.buttons{display:flex;gap:10px;justify-content:center;margin-top:12px}.small{font-size:16px;padding:10px 18px;border-radius:8px;border:1px solid #666;background:#181818;color:#fff}.small:focus,.key:focus{outline:3px solid #4da3ff;outline-offset:2px}</style>
+</head>
+<body>
+<div class="wrap" tabindex="0" id="app">
+  <div class="title">VIDAA Remote Test</div>
+  <div class="status" id="status">Натисни ↑ ↓ ← → або OK</div>
+  <div class="pad">
+    <div class="key up" data-key="ArrowUp">↑</div>
+    <div class="key left" data-key="ArrowLeft">←</div>
+    <div class="key ok" data-key="Enter">OK</div>
+    <div class="key right" data-key="ArrowRight">→</div>
+    <div class="key down" data-key="ArrowDown">↓</div>
+  </div>
+  <div class="info" id="info">Подій: 0 · keydown: 0 · keyup: 0 · SetRemoteKeyboard: ...</div>
+  <div class="log" id="log"></div>
+  <div class="buttons"><button class="small" id="clear">Очистити</button></div>
+</div>
+<script>
+(function(){
+  const app=document.getElementById('app'),status=document.getElementById('status'),info=document.getElementById('info'),log=document.getElementById('log');
+  let total=0, downs=0, ups=0;
+  const keyNames={ArrowUp:'↑ UP',ArrowDown:'↓ DOWN',ArrowLeft:'← LEFT',ArrowRight:'→ RIGHT',Enter:'OK',NumpadEnter:'OK',Escape:'ESC'};
+
+  function addLog(type,e){
+    total++; type==='keydown'?downs++:ups++;
+    const label=keyNames[e.key]||e.key||'(no key)';
+    status.textContent=label+' · '+type;
+    info.textContent='Подій: '+total+' · keydown: '+downs+' · keyup: '+ups+' · SetRemoteKeyboard: '+remoteResult;
+    const row=document.createElement('div');
+    row.textContent=new Date().toLocaleTimeString()+'  '+type+'  key='+label+'  code='+e.code+'  keyCode='+e.keyCode+'  which='+e.which;
+    log.prepend(row);
+    const visual=e.key==='Enter'||e.key==='NumpadEnter'?'Enter':e.key;
+    document.querySelectorAll('.key').forEach(x=>x.classList.toggle('active',x.dataset.key===visual));
+    if(type==='keyup') setTimeout(()=>document.querySelectorAll('.key').forEach(x=>x.classList.remove('active')),80);
+  }
+
+  let remoteResult='не викликано';
+  try{
+    if(typeof window.Hisense_SetRemoteKeyboard==='function'){
+      remoteResult=String(window.Hisense_SetRemoteKeyboard());
+    }else{
+      remoteResult='API відсутній';
+    }
+  }catch(err){remoteResult='ERROR: '+String(err);}
+  info.textContent='Подій: 0 · keydown: 0 · keyup: 0 · SetRemoteKeyboard: '+remoteResult;
+
+  ['keydown','keyup'].forEach(type=>window.addEventListener(type,function(e){
+    addLog(type,e);
+    if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Enter','NumpadEnter'].includes(e.key)) e.preventDefault();
+  },true));
+
+  document.getElementById('clear').addEventListener('click',function(){total=downs=ups=0;log.innerHTML='';status.textContent='Натисни ↑ ↓ ← → або OK';info.textContent='Подій: 0 · keydown: 0 · keyup: 0 · SetRemoteKeyboard: '+remoteResult;app.focus();});
+  app.focus();
+})();
+</script>
+</body>
+</html>
