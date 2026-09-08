@@ -14,7 +14,7 @@ html,body{margin:0;background:#101114;color:#fff;font-family:Arial,sans-serif}
 <body>
 <div id="page">Сторінка 1 з 1</div>
 <pre id="result">Діагностика…</pre>
-<div id="hint">2 — назад · 8 — вперед</div>
+<div id="hint">2 — назад · 8 — вперед · ↑/↓ — навігація</div>
 <script>
 (() => {
   const result=document.getElementById('result');
@@ -51,6 +51,29 @@ html,body{margin:0;background:#101114;color:#fff;font-family:Arial,sans-serif}
     return out;
   }
 
+  function invoke(name,args){
+    const out={name,args:args||[]};
+    try{
+      const fn=window[name];
+      if(typeof fn!=='function'){
+        out.error='not a function';
+        return out;
+      }
+      out.type='function';
+      out.length=fn.length;
+      let src='';
+      try{src=Function.prototype.toString.call(fn)}catch(e){src='[toString failed]'}
+      out.source=src.length>500?src.slice(0,500)+'…':src;
+      const r=fn.apply(window,args||[]);
+      out.result=r;
+      out.resultType=typeof r;
+    }catch(e){
+      out.exception=String(e);
+      out.stack=e&&e.stack?e.stack:null;
+    }
+    return out;
+  }
+
   const tests=[];
 
   // Read-only filesystem probes. No fileWrite is executed.
@@ -73,8 +96,53 @@ html,body{margin:0;background:#101114;color:#fff;font-family:Arial,sans-serif}
     .filter(n=>/^HiUtils|^Hisense/i.test(n))
     .sort();
 
+  // Inventory every exposed HiUtils_/Hisense_ function: arity + native source.
+  // This does not execute setters, login, install/uninstall, or observer registration.
+  const functionInventory=[];
+  for(const name of ownNames){
+    const fn=window[name];
+    if(typeof fn==='function'){
+      const item={name,length:fn.length,type:'function'};
+      try{
+        const src=Function.prototype.toString.call(fn);
+        item.source=src.length>500?src.slice(0,500)+'…':src;
+      }catch(e){item.sourceError=String(e)}
+      functionInventory.push(item);
+    }
+  }
+
+  // Execute zero-argument getters only. These are read-only by naming contract;
+  // everything else is inspected but not invoked to avoid changing TV state.
+  const getterTests=[];
+  for(const name of ownNames){
+    if(!/^Hisense_(Get|get)/.test(name)) continue;
+    const fn=window[name];
+    if(typeof fn!=='function' || fn.length!==0) continue;
+    getterTests.push(invoke(name,[]));
+  }
+
+  // Explicitly probe the observer APIs without registering callbacks: their
+  // arity/source are recorded above, which lets us determine the required
+  // signature without accidentally leaving an observer attached.
+  const observerSignatures=[];
+  for(const name of ['Hisense_RegisterObserver','Hisense_RegisterVolumeObs','Hisense_UnregisterObserver']){
+    if(typeof window[name]==='function'){
+      observerSignatures.push({
+        name,
+        length:window[name].length,
+        source:(()=>{try{const s=Function.prototype.toString.call(window[name]);return s.length>500?s.slice(0,500)+'…':s}catch(e){return '[toString failed]'}})()
+      });
+    }
+  }
+
+  // Remote-keyboard API is inspected only; it is not called because its
+  // arguments are undocumented and a bad call could alter input handling.
+  const remoteKeyboardProbe=typeof window.Hisense_SetRemoteKeyboard==='function'
+    ? {name:'Hisense_SetRemoteKeyboard',length:window.Hisense_SetRemoteKeyboard.length}
+    : {name:'Hisense_SetRemoteKeyboard',present:false};
+
   const diagnostic={
-    diagnosticVersion:'2026-09-08-3',
+    diagnosticVersion:'2026-09-08-4',
     location:location.href,
     userAgent:navigator.userAgent,
     api:{
@@ -85,7 +153,11 @@ html,body{margin:0;background:#101114;color:#fff;font-family:Arial,sans-serif}
       Hisense_uninstallApp:typeof window.Hisense_uninstallApp,
       exposedHiHisenseNames:ownNames
     },
-    tests
+    tests,
+    functionInventory,
+    getterTests,
+    observerSignatures,
+    remoteKeyboardProbe
   };
 
   const text=safe(diagnostic);
