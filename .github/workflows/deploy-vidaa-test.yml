@@ -6,6 +6,7 @@ on:
       - 'vidaa-test/**'
       - 'vidaa-installer/**'
       - 'vidaa-appinfo/**'
+      - 'vidaa-diagnostic/**'
       - '.github/workflows/deploy-vidaa-test.yml'
   workflow_dispatch:
 
@@ -37,6 +38,8 @@ jobs:
           cp -r vidaa-installer/* _site/vidaa-installer/
           mkdir -p _site/vidaa-appinfo
           cp -r vidaa-appinfo/* _site/vidaa-appinfo/
+          mkdir -p _site/vidaa-diagnostic
+          cp -r vidaa-diagnostic/* _site/vidaa-diagnostic/
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
