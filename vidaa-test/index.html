@@ -3,21 +3,21 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>VIDAA Remote Key Test</title>
+  <title>VIDAA Remote Key Test 2</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <main id="app">
-    <h1>VIDAA ПУЛЬТ — ДІАГНОСТИКА</h1>
-    <div id="lastKey">Натисни будь-яку кнопку пульта</div>
-    <div id="history">Очікую подію…</div>
+  <main id="app" tabindex="0">
+    <h1>VIDAA ПУЛЬТ — ТЕСТ 2</h1>
+    <div id="lastKey">Натисни ↑ ↓ ← → або OK</div>
+    <pre id="history">Очікую подію…</pre>
     <div class="grid">
-      <button tabindex="0" data-name="LEFT">← LEFT</button>
-      <button tabindex="0" data-name="UP">↑ UP</button>
-      <button tabindex="0" data-name="RIGHT">→ RIGHT</button>
-      <button tabindex="0" data-name="DOWN">↓ DOWN</button>
-      <button tabindex="0" data-name="OK">OK / ENTER</button>
-      <button tabindex="0" data-name="BACK">BACK / RETURN</button>
+      <div class="test-item" data-name="LEFT">← LEFT</div>
+      <div class="test-item" data-name="UP">↑ UP</div>
+      <div class="test-item" data-name="RIGHT">→ RIGHT</div>
+      <div class="test-item" data-name="DOWN">↓ DOWN</div>
+      <div class="test-item" data-name="OK">OK / ENTER</div>
+      <div class="test-item" data-name="BACK">BACK / RETURN</div>
     </div>
   </main>
   <script src="app.js"></script>
