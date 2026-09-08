@@ -10,7 +10,7 @@
 <body>
 <div class="box">
 <div class="title">VIDAA AppInfo Test</div>
-<div class="sub">Навігація через native focus buttons</div>
+<div class="sub">VIDAA remote key test</div>
 <div id="page" class="page"></div>
 <div id="text" class="text">Очікування... Натисни OK або кнопку ЗАПУСТИТИ</div>
 <div class="nav" aria-label="Remote navigation">
@@ -21,7 +21,7 @@
  <button class="down" id="down" type="button">↓</button>
 </div>
 <button class="run" id="run" type="button">ЗАПУСТИТИ ТЕСТ</button>
-<div class="hint">Кнопки зроблені справжніми focusable &lt;button&gt; — перевіряємо native navigation VIDAA.</div>
+<div class="hint">Пульт: ↑↓←→ = навігація, OK = запуск, 5 = запуск.</div>
 </div>
 <script>
 (()=>{
@@ -60,7 +60,29 @@
  down.onclick=()=>{if(pages.length){idx=Math.min(pages.length-1,idx+1);render()}};
  right.onclick=down.onclick;
  ok.onclick=run;runBtn.onclick=run;
- // Do not rely on JS arrow key events. Native focusable buttons let VIDAA/browser perform its own spatial navigation.
+
+ // VIDAA standardized application key codes plus the commonly exposed OK code 352.
+ // Handle both keydown and keyup because different VIDAA browser builds expose one or the other.
+ function remote(e){
+   const c=e.keyCode||e.which;
+   if(c===38||c===37||c===39||c===40||c===13||c===352||c===53){
+     e.preventDefault();
+     e.stopPropagation();
+   }
+   if(c===38){up.focus();return;}
+   if(c===37){left.focus();return;}
+   if(c===39){right.focus();return;}
+   if(c===40){down.focus();return;}
+   if(c===13||c===352||c===53){
+     const a=document.activeElement;
+     if(a===up||a===left||a===right||a===down||a===ok||a===runBtn){a.click();}
+     else ok.click();
+   }
+ }
+ window.addEventListener('keydown',remote,true);
+ window.addEventListener('keyup',remote,true);
+ document.addEventListener('keydown',remote,true);
+
  setTimeout(()=>ok.focus(),300);
 })();
 </script>
