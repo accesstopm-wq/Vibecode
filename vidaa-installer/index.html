@@ -19,17 +19,18 @@ try{model=typeof window.Hisense_GetModelName==='function'?window.Hisense_GetMode
 $('firmware').textContent=`Firmware: ${fw||'невідомо'}${model?' | Model: '+model:''}`;
 $('api').innerHTML=`HiUtils_createRequest: <span class="${modern?'ok':'bad'}">${modern?'ДОСТУПНИЙ':'НЕМАЄ'}</span>`;
 
+function showObject(label,obj){
+  try{$('result').textContent=label+'\n'+JSON.stringify(obj,null,2);}catch(e){$('result').textContent=label+'\n'+String(obj)+'\n\nJSON.stringify ПОМИЛКА:\n'+String(e);}
+}
 function readAppInfo(){
   if(!modern){$('result').textContent='HiUtils_createRequest недоступний.';return;}
   $('result').textContent='Читаю Appinfo.json…';
   try{
     const r=window.HiUtils_createRequest('fileRead',{path:'websdk/Appinfo.json',mode:6});
-    $('result').textContent='RET: '+r.ret+'\n\nMSG:\n'+String(r.msg||'(порожньо)');
-  }catch(e){$('result').textContent='ПОМИЛКА:\n'+(e&&e.stack?e.stack:e);}
+    showObject('ПОВНА ВІДПОВІДЬ HiUtils_createRequest:',r);
+  }catch(e){showObject('ПОМИЛКА ВИКЛИКУ:',{name:e&&e.name,message:e&&e.message,stack:e&&e.stack,String:String(e)});}
 }
 
-// На VIDAA стрілки/OK перехоплюються браузером, але числові клавіші доходять до JS.
-// Слухаємо keydown у capture-фазі, щоб 5 гарантовано запускав читання.
 function onKey(e){
   const code=e.keyCode||e.which;
   if(e.key==='5'||code===53){
