@@ -3,44 +3,122 @@
   let current = 'home';
   let focusIndex = 0;
 
-  function currentPage() { return document.querySelector(`.page[data-page="${current}"]`); }
-  function focusables() { return [...currentPage().querySelectorAll('.focusable')]; }
+  const KEY = {
+    LEFT: 37,
+    UP: 38,
+    RIGHT: 39,
+    DOWN: 40,
+    ENTER: 13,
+    BACKSPACE: 8,
+    ESC: 27,
+    VIDAA_BACK: 10009
+  };
+
+  function currentPage() {
+    return document.querySelector(`.page[data-page="${current}"]`);
+  }
+
+  function focusables() {
+    return [...currentPage().querySelectorAll('.focusable')];
+  }
+
+  function setFocus(index) {
+    const items = focusables();
+    if (!items.length) return;
+    focusIndex = Math.max(0, Math.min(items.length - 1, index));
+    items[focusIndex].setAttribute('tabindex', '0');
+    items[focusIndex].focus({ preventScroll: true });
+  }
 
   function show(page) {
     current = page;
     pages.forEach(p => p.classList.toggle('active', p.dataset.page === page));
     focusIndex = 0;
-    setTimeout(() => focusables()[0]?.focus(), 0);
+    requestAnimationFrame(() => setFocus(0));
   }
 
   function moveFocus(dx, dy) {
     const items = focusables();
     if (!items.length) return;
+
+    // Home is a fixed 2x2 grid. Other pages contain one button.
     const cols = current === 'home' ? 2 : 1;
+    const rows = Math.ceil(items.length / cols);
     let row = Math.floor(focusIndex / cols);
     let col = focusIndex % cols;
-    if (dx) col = Math.max(0, Math.min(cols - 1, col + dx));
-    if (dy) row = Math.max(0, Math.min(Math.ceil(items.length / cols) - 1, row + dy));
-    const next = Math.min(items.length - 1, row * cols + col);
-    focusIndex = next;
-    items[focusIndex].focus();
+
+    if (dx !== 0) col = Math.max(0, Math.min(cols - 1, col + dx));
+    if (dy !== 0) row = Math.max(0, Math.min(rows - 1, row + dy));
+
+    setFocus(Math.min(items.length - 1, row * cols + col));
   }
 
-  document.addEventListener('keydown', e => {
-    const key = e.key;
-    const code = e.keyCode;
-    document.getElementById('status').textContent = `KEY: ${key} (${code})`;
-    if (current === 'info') document.getElementById('keyInfo').textContent = `Остання кнопка: ${key} · keyCode: ${code}`;
+  function activate() {
+    const items = focusables();
+    if (items[focusIndex]) items[focusIndex].click();
+  }
 
-    if (key === 'ArrowUp' || code === 38) { e.preventDefault(); moveFocus(0, -1); }
-    else if (key === 'ArrowDown' || code === 40) { e.preventDefault(); moveFocus(0, 1); }
-    else if (key === 'ArrowLeft' || code === 37) { e.preventDefault(); moveFocus(-1, 0); }
-    else if (key === 'ArrowRight' || code === 39) { e.preventDefault(); moveFocus(1, 0); }
-    else if (key === 'Enter' || code === 13) { e.preventDefault(); document.activeElement?.click(); }
-    else if (key === 'Escape' || code === 8 || key === 'Backspace') { e.preventDefault(); if (current !== 'home') show('home'); }
+  function goBack() {
+    if (current !== 'home') show('home');
+  }
+
+  function getCode(e) {
+    // VIDAA/browser firmware can expose the remote key through different fields.
+    return Number(e.keyCode || e.which || e.detail || 0);
+  }
+
+  function getKey(e) {
+    const code = getCode(e);
+    const key = String(e.key || e.keyIdentifier || '').toLowerCase();
+
+    if (code === KEY.LEFT || key === 'arrowleft' || key === 'left') return 'left';
+    if (code === KEY.UP || key === 'arrowup' || key === 'up') return 'up';
+    if (code === KEY.RIGHT || key === 'arrowright' || key === 'right') return 'right';
+    if (code === KEY.DOWN || key === 'arrowdown' || key === 'down') return 'down';
+    if (code === KEY.ENTER || key === 'enter' || key === 'ok') return 'enter';
+    if (code === KEY.BACKSPACE || code === KEY.ESC || code === KEY.VIDAA_BACK || key === 'backspace' || key === 'escape' || key === 'back') return 'back';
+    return '';
+  }
+
+  function handleRemoteKey(e) {
+    const code = getCode(e);
+    const keyName = getKey(e);
+
+    document.getElementById('status').textContent = `KEY: ${e.key || 'unknown'} (${code})`;
+    if (current === 'info') {
+      document.getElementById('keyInfo').textContent = `Остання кнопка: ${e.key || 'unknown'} · keyCode: ${code}`;
+    }
+
+    if (!keyName) return;
+
+    // Stop the TV/browser from scrolling or moving its own focus.
+    if (e.cancelable) e.preventDefault();
+    e.stopPropagation();
+
+    switch (keyName) {
+      case 'left': moveFocus(-1, 0); break;
+      case 'right': moveFocus(1, 0); break;
+      case 'up': moveFocus(0, -1); break;
+      case 'down': moveFocus(0, 1); break;
+      case 'enter': activate(); break;
+      case 'back': goBack(); break;
+    }
+  }
+
+  // Capture phase is intentional: some TV browsers handle remote keys before
+  // normal bubbling listeners get them.
+  window.addEventListener('keydown', handleRemoteKey, true);
+  document.addEventListener('keydown', handleRemoteKey, true);
+
+  document.querySelectorAll('[data-target]').forEach(btn => {
+    btn.addEventListener('click', () => show(btn.dataset.target));
   });
 
-  document.querySelectorAll('[data-target]').forEach(btn => btn.addEventListener('click', () => show(btn.dataset.target)));
-  document.querySelectorAll('.back-btn').forEach(btn => btn.addEventListener('click', () => show('home')));
+  document.querySelectorAll('.back-btn').forEach(btn => {
+    btn.addEventListener('click', () => show('home'));
+  });
+
+  // Make focus deterministic on TV browsers.
+  document.querySelectorAll('.focusable').forEach(btn => btn.setAttribute('tabindex', '0'));
   show('home');
 })();
