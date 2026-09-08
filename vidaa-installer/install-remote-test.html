@@ -8,25 +8,27 @@ html,body{margin:0;width:100%;height:100%;background:#101114;color:#fff;font-fam
 </style>
 </head>
 <body>
-<div class="box">
+<div class="box" id="app" tabindex="0">
 <div class="title">VIDAA AppInfo Test</div>
-<div class="sub">5 — READ → WRITE SAME DATA → READ</div>
+<div class="sub">OK — запустити тест</div>
 <div id="page" class="page"></div>
-<div id="text" class="text">Очікування... Натисни 5</div>
-<div class="hint">2 — назад &nbsp;&nbsp; 8 — далі &nbsp;&nbsp; 5 — запустити тест</div>
+<div id="text" class="text">Очікування... Натисни OK</div>
+<div class="hint">↑ ↓ — сторінки &nbsp;&nbsp; OK — запустити &nbsp;&nbsp; 2/8/5 — резервні кнопки</div>
 </div>
 <script>
 (()=>{
- const text=document.getElementById('text'),page=document.getElementById('page');
+ const app=document.getElementById('app'),text=document.getElementById('text'),page=document.getElementById('page');
  let pages=[],idx=0;
- const render=()=>{page.textContent=pages.length?'Сторінка '+(idx+1)+' / '+pages.length:'';text.textContent=pages[idx]||'Очікування... Натисни 5'};
- const addChunked=(title,s)=>{const n=700; s=String(s); if(!s.length){pages.push(title+'\n\n<empty>');return} for(let i=0;i<s.length;i+=n)pages.push(title+(s.length>n?' ['+(Math.floor(i/n)+1)+']':'')+'\n\n'+s.slice(i,i+n))};
+ const render=()=>{page.textContent=pages.length?'Сторінка '+(idx+1)+' / '+pages.length:'';text.textContent=pages[idx]||'Очікування... Натисни OK'};
+ const addChunked=(title,s)=>{const n=700;s=String(s);if(!s.length){pages.push(title+'\n\n<empty>');return}for(let i=0;i<s.length;i+=n)pages.push(title+(s.length>n?' ['+(Math.floor(i/n)+1)+']':'')+'\n\n'+s.slice(i,i+n))};
  const safe=v=>{try{return JSON.stringify(v,null,2)}catch(e){return String(v)}};
  const req=()=>window.HiUtils_createRequest;
+ let remoteKeyboard='not called';
+ try{if(typeof window.Hisense_SetRemoteKeyboard==='function')remoteKeyboard=String(window.Hisense_SetRemoteKeyboard());else remoteKeyboard='API absent'}catch(e){remoteKeyboard='ERROR: '+String(e)}
  function run(){
   pages=[];idx=0;render();
   const h=req();
-  pages.push('=== STEP 0: HiUtils_createRequest ===\n\ntypeof: '+typeof h+'\nlength: '+(typeof h==='function'?h.length:'-')+'\n\nsource:\n'+(typeof h==='function'?Function.prototype.toString.call(h):'<not a function>'));
+  pages.push('=== STEP 0: HiUtils_createRequest ===\n\nRemote keyboard: '+remoteKeyboard+'\n\ntypeof: '+typeof h+'\nlength: '+(typeof h==='function'?h.length:'-')+'\n\nsource:\n'+(typeof h==='function'?Function.prototype.toString.call(h):'<not a function>'));
   if(typeof h!=='function'){render();return}
   const path='websdk/Appinfo.json',mode=6;
   let r;
@@ -47,7 +49,23 @@ html,body{margin:0;width:100%;height:100%;background:#101114;color:#fff;font-fam
   pages.push('=== FINAL RESULT ===\n\n'+(same?'ROUNDTRIP: EXACT SAME DATA':'ROUNDTRIP: DATA DIFFERENT OR READ FAILED')+'\n\nThe test wrote the exact data returned by the first fileRead, then read the file again and compared the returned msg byte-for-byte as a JavaScript string.');
   idx=0;render();
  }
- window.addEventListener('keydown',e=>{const k=String(e.key||'');if(k==='5'||e.keyCode===53||e.which===53){e.preventDefault();run()}else if(k==='2'||e.keyCode===50||e.which===50){if(pages.length){idx=Math.max(0,idx-1);render()}}else if(k==='8'||e.keyCode===56||e.which===56){if(pages.length){idx=Math.min(pages.length-1,idx+1);render()}}},true);
+ function keyInfo(e){
+  const key=String(e.key||'');
+  const code=String(e.code||'');
+  const kc=e.keyCode||e.which||0;
+  return {up:key==='ArrowUp'||code==='ArrowUp'||kc===38,down:key==='ArrowDown'||code==='ArrowDown'||kc===40,left:key==='ArrowLeft'||code==='ArrowLeft'||kc===37,right:key==='ArrowRight'||code==='ArrowRight'||kc===39,ok:key==='Enter'||key==='NumpadEnter'||key==='OK'||code==='Enter'||code==='NumpadEnter'||kc===13||kc===352};
+ }
+ window.addEventListener('keydown',e=>{
+  const k=keyInfo(e);
+  if(k.up||k.left){if(pages.length){e.preventDefault();idx=Math.max(0,idx-1);render()}return}
+  if(k.down||k.right){if(pages.length){e.preventDefault();idx=Math.min(pages.length-1,idx+1);render()}return}
+  if(k.ok){e.preventDefault();run();return}
+  const key=String(e.key||'');
+  if(key==='5'||e.keyCode===53||e.which===53){e.preventDefault();run()}
+  else if(key==='2'||e.keyCode===50||e.which===50){if(pages.length){e.preventDefault();idx=Math.max(0,idx-1);render()}}
+  else if(key==='8'||e.keyCode===56||e.which===56){if(pages.length){e.preventDefault();idx=Math.min(pages.length-1,idx+1);render()}}
+ },true);
+ app.focus();
 })();
 </script>
 </body>
