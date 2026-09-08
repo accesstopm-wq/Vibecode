@@ -4,44 +4,48 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>VIDAA AppInfo Test</title>
 <style>
-html,body{margin:0;width:100%;height:100%;background:#101114;color:#fff;font-family:Arial,sans-serif}body{display:flex;align-items:center;justify-content:center}.box{width:92%;max-width:1200px;text-align:center}.title{font-size:42px;font-weight:bold;margin-bottom:18px}p{font-size:28px;font-weight:bold}.page{font-size:22px;color:#aaa;margin:14px}.text{font-size:22px;line-height:1.45;white-space:pre-wrap;word-break:break-word;text-align:left;height:68vh;overflow:hidden;background:#181a1f;padding:18px;border-radius:10px}.hint{font-size:20px;color:#aaa;margin-top:12px}
+html,body{margin:0;width:100%;height:100%;background:#101114;color:#fff;font-family:Arial,sans-serif}body{display:flex;align-items:center;justify-content:center}.box{width:92%;max-width:1200px;text-align:center}.title{font-size:40px;font-weight:bold;margin-bottom:10px}.sub{font-size:25px;font-weight:bold}.page{font-size:22px;color:#aaa;margin:10px}.text{font-size:21px;line-height:1.42;white-space:pre-wrap;word-break:break-word;text-align:left;height:68vh;overflow:hidden;background:#181a1f;padding:18px;border-radius:10px}.hint{font-size:20px;color:#aaa;margin-top:10px}
 </style>
 </head>
 <body>
 <div class="box">
 <div class="title">VIDAA AppInfo Test</div>
-<p>5 — READ → WRITE SAME DATA → READ</p>
+<div class="sub">5 — READ → WRITE SAME DATA → READ</div>
 <div id="page" class="page"></div>
-<div id="text" class="text">Очікування...</div>
-<div class="hint">2 — назад &nbsp;&nbsp; 8 — далі</div>
+<div id="text" class="text">Очікування... Натисни 5</div>
+<div class="hint">2 — назад &nbsp;&nbsp; 8 — далі &nbsp;&nbsp; 5 — запустити тест</div>
 </div>
 <script>
 (()=>{
  const text=document.getElementById('text'),page=document.getElementById('page');
  let pages=[],idx=0;
- const render=()=>{page.textContent=pages.length?'Сторінка '+(idx+1)+' / '+pages.length:'';text.textContent=pages[idx]||'Очікування...'};
- const makePages=s=>{const n=1200;pages=[];for(let i=0;i<s.length;i+=n)pages.push(s.slice(i,i+n));idx=0;render()};
+ const render=()=>{page.textContent=pages.length?'Сторінка '+(idx+1)+' / '+pages.length:'';text.textContent=pages[idx]||'Очікування... Натисни 5'};
+ const addChunked=(title,s)=>{const n=700; s=String(s); if(!s.length){pages.push(title+'\n\n<empty>');return} for(let i=0;i<s.length;i+=n)pages.push(title+(s.length>n?' ['+(Math.floor(i/n)+1)+']':'')+'\n\n'+s.slice(i,i+n))};
  const safe=v=>{try{return JSON.stringify(v,null,2)}catch(e){return String(v)}};
  const req=()=>window.HiUtils_createRequest;
  function run(){
-  const out=[];const h=req();
-  out.push('=== HiUtils AppInfo ROUNDTRIP TEST ===');
-  out.push('typeof: '+typeof h);
-  if(typeof h!=='function'){makePages(out.join('\n\n'));return}
-  try{out.push('length: '+h.length)}catch(e){}
-  try{out.push('source:\n'+Function.prototype.toString.call(h))}catch(e){out.push('source error: '+e)}
+  pages=[];idx=0;render();
+  const h=req();
+  pages.push('=== STEP 0: HiUtils_createRequest ===\n\ntypeof: '+typeof h+'\nlength: '+(typeof h==='function'?h.length:'-')+'\n\nsource:\n'+(typeof h==='function'?Function.prototype.toString.call(h):'<not a function>'));
+  if(typeof h!=='function'){render();return}
   const path='websdk/Appinfo.json',mode=6;
-  out.push('\n=== 1. fileRead BEFORE ===');
   let r;
-  try{r=h('fileRead',{path,mode});out.push('RETURN:\n'+safe(r))}catch(e){out.push('EXCEPTION:\n'+String(e));makePages(out.join('\n\n'));return}
-  if(!r || r.code!==0){out.push('\nREAD DID NOT RETURN code=0 — STOP, NOTHING WRITTEN');makePages(out.join('\n\n'));return}
+  try{r=h('fileRead',{path,mode})}catch(e){pages.push('=== STEP 1: fileRead BEFORE ===\n\nEXCEPTION:\n'+String(e));render();return}
+  pages.push('=== STEP 1: fileRead BEFORE ===\n\ncode: '+(r&&r.code)+'\nmsg type: '+typeof(r&&r.msg)+'\nmsg length: '+String(r&&r.msg||'').length+'\n\nFull response follows on next page(s).');
+  addChunked('=== READ BEFORE: response ===',safe(r));
+  if(!r||r.code!==0){pages.push('=== STOP ===\n\nREAD DID NOT RETURN code=0.\n\nNO WRITE WAS ATTEMPTED.');render();return}
   const data=r.msg;
-  out.push('\n=== 2. fileWrite SAME DATA ===');
-  out.push('writedata length: '+String(data||'').length);
-  try{const w=h('fileWrite',{path,mode,writedata:data});out.push('RETURN:\n'+safe(w))}catch(e){out.push('EXCEPTION:\n'+String(e));makePages(out.join('\n\n'));return}
-  out.push('\n=== 3. fileRead AFTER ===');
-  try{const a=h('fileRead',{path,mode});out.push('RETURN:\n'+safe(a));if(a&&a.code===0&&a.msg===data)out.push('\nROUNDTRIP: EXACT SAME DATA');else out.push('\nROUNDTRIP: DATA DIFFERENT OR READ FAILED')}catch(e){out.push('EXCEPTION:\n'+String(e))}
-  makePages(out.join('\n\n'));
+  let w;
+  try{w=h('fileWrite',{path,mode,writedata:data})}catch(e){pages.push('=== STEP 2: fileWrite SAME DATA ===\n\nEXCEPTION:\n'+String(e));render();return}
+  pages.push('=== STEP 2: fileWrite SAME DATA ===\n\nwritedata length: '+String(data||'').length+'\n\ncode: '+(w&&w.code)+'\n\nFull response follows on next page.');
+  addChunked('=== WRITE: response ===',safe(w));
+  let a;
+  try{a=h('fileRead',{path,mode})}catch(e){pages.push('=== STEP 3: fileRead AFTER ===\n\nEXCEPTION:\n'+String(e));render();return}
+  pages.push('=== STEP 3: fileRead AFTER ===\n\ncode: '+(a&&a.code)+'\nmsg length: '+String(a&&a.msg||'').length+'\n\nFull response follows on next page(s).');
+  addChunked('=== READ AFTER: response ===',safe(a));
+  const same=!!(a&&a.code===0&&a.msg===data);
+  pages.push('=== FINAL RESULT ===\n\n'+(same?'ROUNDTRIP: EXACT SAME DATA':'ROUNDTRIP: DATA DIFFERENT OR READ FAILED')+'\n\nThe test wrote the exact data returned by the first fileRead, then read the file again and compared the returned msg byte-for-byte as a JavaScript string.');
+  idx=0;render();
  }
  window.addEventListener('keydown',e=>{const k=String(e.key||'');if(k==='5'||e.keyCode===53||e.which===53){e.preventDefault();run()}else if(k==='2'||e.keyCode===50||e.which===50){if(pages.length){idx=Math.max(0,idx-1);render()}}else if(k==='8'||e.keyCode===56||e.which===56){if(pages.length){idx=Math.min(pages.length-1,idx+1);render()}}},true);
 })();
