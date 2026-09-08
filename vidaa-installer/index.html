@@ -32,7 +32,8 @@ html,body{margin:0;background:#101114;color:#fff;font-family:Arial,sans-serif}
 
   function read(){
     try{
-      const r=window.HiUtils_createRequest('fileRead',{path:'/APPS/websdk/Appinfo.json',mode:6});
+      // HiUtils adds /APPS internally; do not include /APPS in path.
+      const r=window.HiUtils_createRequest('fileRead',{path:'websdk/Appinfo.json',mode:6});
       let text;
       try{text=JSON.stringify(r,null,2)}catch(e){text=String(r)}
       makePages(text);
