@@ -1,32 +1,22 @@
 <!doctype html>
 <html lang="uk">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>VIDAA API Test</title>
-<style>*{box-sizing:border-box}body{margin:0;background:#101114;color:#fff;font-family:Arial,sans-serif;font-size:28px}main{padding:40px;max-width:1100px;margin:auto}h1{font-size:42px}.card{border:2px solid #555;border-radius:14px;padding:24px;margin:18px 0}.ok{color:#72ff72}.bad{color:#ff7070}.warn{color:#ffd45a}#result{white-space:pre-wrap;word-break:break-word;font-size:22px;line-height:1.4;min-height:180px}.hint{font-size:30px}.key{font-size:48px;font-weight:bold}.nav{font-size:28px;line-height:1.5}</style>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>VIDAA</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;background:#101114;color:#fff;font-family:Arial,sans-serif}body{padding:20px}#result{width:100%;height:100%;white-space:pre-wrap;word-break:break-all;font-size:22px;line-height:1.35;overflow:hidden}
+</style>
 </head>
-<body><main>
-<h1>VIDAA — API TEST</h1>
-<div class="card"><div id="firmware">Перевіряю…</div><div id="api"></div></div>
-<div class="card"><div class="hint">Пульт:</div><div class="nav"><b>5</b> — читати Appinfo.json<br><b>2</b> — попередня сторінка<br><b>8</b> — наступна сторінка</div></div>
-<div class="card"><div id="page">Сторінка: —</div><div id="result">Очікую натискання 5…</div></div>
+<body><div id="result"></div>
 <script>
 (() => {
-const $=id=>document.getElementById(id);
+const result=document.getElementById('result');
 const modern=typeof window.HiUtils_createRequest==='function';
-let fw=null,model=null;
-try{fw=typeof window.Hisense_GetFirmWareVersion==='function'?window.Hisense_GetFirmWareVersion():null}catch(e){}
-try{model=typeof window.Hisense_GetModelName==='function'?window.Hisense_GetModelName():null}catch(e){}
-$('firmware').textContent=`Firmware: ${fw||'невідомо'}${model?' | Model: '+model:''}`;
-$('api').innerHTML=`HiUtils_createRequest: <span class="${modern?'ok':'bad'}">${modern?'ДОСТУПНИЙ':'НЕМАЄ'}</span>`;
-
 let pages=[];
 let pageIndex=0;
-const PAGE_SIZE=1800;
+const PAGE_SIZE=100;
 
 function renderPage(){
-  if(!pages.length){$('page').textContent='Сторінка: —';return;}
-  $('page').textContent=`Сторінка: ${pageIndex+1} / ${pages.length}    |    2 ←   8 →`;
-  $('result').textContent=pages[pageIndex];
+  result.textContent=pages.length?pages[pageIndex]:'(порожньо)';
 }
 
 function makePages(text){
@@ -39,8 +29,6 @@ function makePages(text){
 
 function readAppInfo(){
   if(!modern){makePages('HiUtils_createRequest недоступний.');return;}
-  $('result').textContent='Читаю Appinfo.json…';
-  $('page').textContent='Сторінка: …';
   try{
     const r=window.HiUtils_createRequest('fileRead',{path:'websdk/Appinfo.json',mode:6});
     let text;
@@ -51,14 +39,8 @@ function readAppInfo(){
   }
 }
 
-function prevPage(){
-  if(!pages.length)return;
-  if(pageIndex>0){pageIndex--;renderPage();}
-}
-function nextPage(){
-  if(!pages.length)return;
-  if(pageIndex<pages.length-1){pageIndex++;renderPage();}
-}
+function prevPage(){if(pageIndex>0){pageIndex--;renderPage();}}
+function nextPage(){if(pageIndex<pages.length-1){pageIndex++;renderPage();}}
 
 function onKey(e){
   const code=e.keyCode||e.which;
@@ -70,5 +52,6 @@ window.addEventListener('keydown',onKey,true);
 document.addEventListener('keydown',onKey,true);
 window.addEventListener('keypress',onKey,true);
 document.addEventListener('keypress',onKey,true);
+readAppInfo();
 })();
 </script></body></html>
