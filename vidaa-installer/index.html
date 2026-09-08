@@ -2,30 +2,45 @@
 <html lang="uk">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>VIDAA API Test</title>
-<style>*{box-sizing:border-box}body{margin:0;background:#101114;color:#fff;font-family:Arial,sans-serif;font-size:28px}main{padding:40px;max-width:1100px;margin:auto}h1{font-size:42px}.card{border:2px solid #555;border-radius:14px;padding:24px;margin:18px 0}.button{display:block;width:100%;padding:24px;margin-top:18px;border:3px solid #777;border-radius:14px;background:#222;color:#fff;font-size:30px}.button:focus{outline:4px solid #fff;outline-offset:3px}.ok{color:#72ff72}.bad{color:#ff7070}.warn{color:#ffd45a}#result{white-space:pre-wrap;word-break:break-word;font-size:22px;line-height:1.4}</style>
+<style>*{box-sizing:border-box}body{margin:0;background:#101114;color:#fff;font-family:Arial,sans-serif;font-size:28px}main{padding:40px;max-width:1100px;margin:auto}h1{font-size:42px}.card{border:2px solid #555;border-radius:14px;padding:24px;margin:18px 0}.ok{color:#72ff72}.bad{color:#ff7070}.warn{color:#ffd45a}#result{white-space:pre-wrap;word-break:break-word;font-size:22px;line-height:1.4}.hint{font-size:30px}.key{font-size:48px;font-weight:bold}</style>
 </head>
 <body><main>
 <h1>VIDAA — API TEST</h1>
 <div class="card"><div id="firmware">Перевіряю…</div><div id="api"></div></div>
-<div class="card"><button id="read" class="button" tabindex="0">ПРОЧИТАТИ APPINFO.JSON</button></div>
-<div class="card"><div id="result">Нічого не змінюю. Тільки читаю Appinfo.json.</div></div>
-</main>
+<div class="card"><div class="hint">Натисни на пульті:</div><div class="key">5</div><div>для читання Appinfo.json</div></div>
+<div class="card"><div id="result">Очікую натискання 5…</div></div>
 <script>
 (() => {
 const $=id=>document.getElementById(id);
-let modern=typeof window.HiUtils_createRequest==='function';
+const modern=typeof window.HiUtils_createRequest==='function';
 let fw=null,model=null;
 try{fw=typeof window.Hisense_GetFirmWareVersion==='function'?window.Hisense_GetFirmWareVersion():null}catch(e){}
 try{model=typeof window.Hisense_GetModelName==='function'?window.Hisense_GetModelName():null}catch(e){}
 $('firmware').textContent=`Firmware: ${fw||'невідомо'}${model?' | Model: '+model:''}`;
 $('api').innerHTML=`HiUtils_createRequest: <span class="${modern?'ok':'bad'}">${modern?'ДОСТУПНИЙ':'НЕМАЄ'}</span>`;
-$('read').addEventListener('click',()=>{
- if(!modern){$('result').textContent='HiUtils_createRequest недоступний.';return;}
- try{
-   const r=window.HiUtils_createRequest('fileRead',{path:'websdk/Appinfo.json',mode:6});
-   $('result').textContent='RET: '+r.ret+'\n\nMSG:\n'+String(r.msg||'(порожньо)');
- }catch(e){$('result').textContent='ПОМИЛКА:\n'+(e&&e.stack?e.stack:e);}
-});
-$('read').focus();
+
+function readAppInfo(){
+  if(!modern){$('result').textContent='HiUtils_createRequest недоступний.';return;}
+  $('result').textContent='Читаю Appinfo.json…';
+  try{
+    const r=window.HiUtils_createRequest('fileRead',{path:'websdk/Appinfo.json',mode:6});
+    $('result').textContent='RET: '+r.ret+'\n\nMSG:\n'+String(r.msg||'(порожньо)');
+  }catch(e){$('result').textContent='ПОМИЛКА:\n'+(e&&e.stack?e.stack:e);}
+}
+
+// На VIDAA стрілки/OK перехоплюються браузером, але числові клавіші доходять до JS.
+// Слухаємо keydown у capture-фазі, щоб 5 гарантовано запускав читання.
+function onKey(e){
+  const code=e.keyCode||e.which;
+  if(e.key==='5'||code===53){
+    e.preventDefault();
+    e.stopPropagation();
+    readAppInfo();
+  }
+}
+window.addEventListener('keydown',onKey,true);
+document.addEventListener('keydown',onKey,true);
+window.addEventListener('keypress',onKey,true);
+document.addEventListener('keypress',onKey,true);
 })();
 </script></body></html>
