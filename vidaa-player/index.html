@@ -5,14 +5,14 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>VIDAA Player</title>
 <style>
-*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;background:#000;color:#fff;font-family:Arial,sans-serif;overflow:hidden}body{display:flex;align-items:center;justify-content:center}#app{width:100%;height:100%;display:flex;flex-direction:column;justify-content:center;background:#000}#video{width:100%;height:100%;object-fit:contain;background:#000}#panel{position:fixed;left:3%;right:3%;bottom:3%;padding:18px;background:rgba(15,17,20,.94);border-radius:16px;display:flex;gap:12px;align-items:center;opacity:1;transition:opacity .2s}#panel.hidden{opacity:0;pointer-events:none}input{flex:1;min-width:0;height:58px;background:#252932;color:#fff;border:2px solid #666;border-radius:10px;padding:0 16px;font-size:24px;outline:none}button{height:58px;padding:0 24px;background:#30343d;color:#fff;border:2px solid #777;border-radius:10px;font-size:22px;outline:none}button:focus,input:focus{border-color:#fff;box-shadow:0 0 0 3px rgba(255,255,255,.25)}#status{position:fixed;top:3%;left:3%;right:3%;padding:12px 18px;background:rgba(15,17,20,.9);font-size:20px;border-radius:10px;display:none}#hint{position:fixed;top:3%;right:3%;font-size:18px;color:#aaa}#url{position:fixed;left:3%;right:3%;bottom:3%;display:flex;gap:12px}#url.hide{display:none}.control{min-width:100px}.focus{outline:3px solid #fff}
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;background:#000;color:#fff;font-family:Arial,sans-serif;overflow:hidden}body{display:flex;align-items:center;justify-content:center}#app{width:100%;height:100%;display:flex;flex-direction:column;justify-content:center;background:#000}#video{width:100%;height:100%;object-fit:contain;background:#000}input{flex:1;min-width:0;height:58px;background:#252932;color:#fff;border:2px solid #666;border-radius:10px;padding:0 16px;font-size:24px;outline:none}button{height:58px;padding:0 24px;background:#30343d;color:#fff;border:2px solid #777;border-radius:10px;font-size:22px;outline:none}button:focus,input:focus{border-color:#fff;box-shadow:0 0 0 3px rgba(255,255,255,.25)}#status{position:fixed;top:3%;left:3%;right:3%;padding:12px 18px;background:rgba(15,17,20,.9);font-size:20px;border-radius:10px;display:none}#hint{position:fixed;top:3%;right:3%;font-size:18px;color:#aaa}#url{position:fixed;left:3%;right:3%;bottom:3%;display:flex;gap:12px}#url.hide{display:none}.control{min-width:100px}
 </style>
 </head>
 <body>
 <div id="app">
   <video id="video" controls playsinline preload="metadata"></video>
   <div id="status"></div>
-  <div id="hint">← → перемотка · OK play/pause · Back вихід</div>
+  <div id="hint">← → перемотка · ↑ ↓ гучність · OK play/pause · Back вихід</div>
   <div id="url">
     <input id="source" type="url" placeholder="Встав URL відео (.mp4 / .webm / .m3u8)">
     <button id="load" class="control">Відкрити</button>
@@ -32,44 +32,32 @@
 
   function showStatus(text,ms=3500){
     status.textContent=text; status.style.display='block';
-    clearTimeout(showStatus.t);
-    showStatus.t=setTimeout(()=>status.style.display='none',ms);
+    clearTimeout(showStatus.t); showStatus.t=setTimeout(()=>status.style.display='none',ms);
   }
-
   function hideUrl(){
-    urlBox.classList.add('hide');
-    controlsVisible=false;
-    clearTimeout(hideTimer);
-    hideTimer=setTimeout(()=>{urlBox.classList.remove('hide');controlsVisible=true},5000);
+    urlBox.classList.add('hide'); controlsVisible=false;
+    clearTimeout(hideTimer); hideTimer=setTimeout(()=>{urlBox.classList.remove('hide');controlsVisible=true},5000);
   }
-
   function openUrl(raw){
     const u=(raw||'').trim();
     if(!u){showStatus('Введи URL відео');source.focus();return;}
     try{new URL(u,location.href)}catch(e){showStatus('Некоректний URL');return;}
-    video.src=u;
-    video.load();
-    video.play().catch(()=>{});
-    showStatus('Відкриваю відео…');
-    hideUrl();
+    video.src=u; video.load(); video.play().catch(()=>{});
+    showStatus('Відкриваю відео…'); hideUrl();
   }
-
   function fullscreen(){
     const f=video.requestFullscreen||video.webkitRequestFullscreen;
     if(f) f.call(video).catch(()=>{});
   }
-
   load.addEventListener('click',()=>openUrl(source.value));
   full.addEventListener('click',fullscreen);
   source.addEventListener('keydown',e=>{if(e.key==='Enter'||e.keyCode===13){e.preventDefault();openUrl(source.value)}});
-
   video.addEventListener('loadedmetadata',()=>showStatus(`Відео: ${video.videoWidth}×${video.videoHeight}`));
   video.addEventListener('error',()=>showStatus('Не вдалося відтворити це джерело. Перевір URL, CORS і формат.'));
   video.addEventListener('play',()=>showStatus('▶ Відтворення',1200));
   video.addEventListener('pause',()=>showStatus('Ⅱ Пауза',1200));
 
-  // Current VIDAA firmware exposes this proprietary API. On some models it
-  // switches the remote into a mode where navigation keys are delivered to JS.
+  // Try the VIDAA proprietary remote-keyboard switch on firmware where it exists.
   try{
     if(typeof window.Hisense_SetRemoteKeyboard==='function'){
       const r=window.Hisense_SetRemoteKeyboard();
@@ -78,8 +66,7 @@
   }catch(e){console.log('Hisense_SetRemoteKeyboard failed',e)}
 
   function remoteKey(e){
-    const key=e.key;
-    const code=e.keyCode||e.which;
+    const key=e.key, code=e.keyCode||e.which;
     const left=key==='ArrowLeft'||code===37;
     const right=key==='ArrowRight'||code===39;
     const up=key==='ArrowUp'||code===38;
@@ -89,8 +76,8 @@
 
     if(back){
       e.preventDefault();e.stopPropagation();
-      if(document.fullscreenElement){document.exitFullscreen().catch(()=>{});return}
-      if(!controlsVisible){urlBox.classList.remove('hide');controlsVisible=true;return}
+      if(document.fullscreenElement){document.exitFullscreen().catch(()=>{});return;}
+      if(!controlsVisible){urlBox.classList.remove('hide');controlsVisible=true;return;}
       try{window.close()}catch(_){}
       return;
     }
@@ -100,7 +87,7 @@
         if(document.activeElement===load) openUrl(source.value);
         else if(document.activeElement===full) fullscreen();
         else openUrl(source.value);
-      }else if(video.paused){video.play().catch(()=>{})}else{video.pause()}
+      }else if(video.paused){video.play().catch(()=>{});}else{video.pause();}
       return;
     }
     if(left||right){
@@ -114,19 +101,18 @@
     if(up||down){
       e.preventDefault();e.stopPropagation();
       if(video.muted && up) video.muted=false;
-      video.volume=Math.max(0,Math.min(1,video.volume+(up?.1:-.1)));
+      video.volume=Math.max(0,Math.min(1,video.volume+(up?0.1:-0.1)));
       showStatus(`Гучність ${Math.round(video.volume*100)}%`,900);
       return;
     }
   }
-
   window.addEventListener('keydown',remoteKey,true);
   document.addEventListener('keydown',remoteKey,true);
   window.addEventListener('keypress',remoteKey,true);
   document.addEventListener('keypress',remoteKey,true);
 
   const q=new URLSearchParams(location.search).get('url');
-  if(q){source.value=q;openUrl(q)}else setTimeout(()=>source.focus(),200);
+  if(q){source.value=q;openUrl(q);}else setTimeout(()=>source.focus(),200);
 })();
 </script>
 </body>
