@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VIDAA AppInfo</title>
+<style>
+html,body{margin:0;background:#101114;color:#fff;font-family:Arial,sans-serif}
+#result{padding:28px;white-space:pre-wrap;word-break:break-all;font-size:30px;line-height:1.35}
+</style>
+</head>
+<body>
+<pre id="result">Читаю…</pre>
+<script>
+(() => {
+  const result=document.getElementById('result');
+  const PAGE_SIZE=200;
+  let pages=[];
+  let pageIndex=0;
+
+  function render(){result.textContent=pages[pageIndex]||'';}
+
+  function makePages(text){
+    pages=[];
+    for(let i=0;i<text.length;i+=PAGE_SIZE) pages.push(text.slice(i,i+PAGE_SIZE));
+    if(!pages.length) pages=['(порожньо)'];
+    pageIndex=0;
+    render();
+  }
+
+  function read(){
+    try{
+      // HiUtils_createRequest adds /APPS internally.
+      const r=window.HiUtils_createRequest('fileRead',{path:'websdk/Appinfo.json',mode:6});
+
+      // On success show the actual AppInfo payload, not the fileRead wrapper.
+      if(r && r.ret===true && typeof r.msg==='string'){
+        try{
+          makePages(JSON.stringify(JSON.parse(r.msg),null,2));
+          return;
+        }catch(e){}
+      }
+      if(r && r.ret===true && r.msg!==undefined){
+        makePages(JSON.stringify(r.msg,null,2));
+        return;
+      }
+      makePages(JSON.stringify(r,null,2));
+    }catch(e){
+      makePages('ПОМИЛКА:\n'+(e&&e.stack?e.stack:String(e)));
+    }
+  }
+
+  function onKey(e){
+    const code=e.keyCode||e.which;
+    if(e.key==='2'||code===50){
+      e.preventDefault();e.stopPropagation();
+      if(pageIndex>0){pageIndex--;render();}
+      return;
+    }
+    if(e.key==='8'||code===56){
+      e.preventDefault();e.stopPropagation();
+      if(pageIndex<pages.length-1){pageIndex++;render();}
+      return;
+    }
+  }
+
+  window.addEventListener('keydown',onKey,true);
+  document.addEventListener('keydown',onKey,true);
+  window.addEventListener('keypress',onKey,true);
+  document.addEventListener('keypress',onKey,true);
+  read();
+})();
+</script>
+</body>
+</html>
