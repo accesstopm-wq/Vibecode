@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VIDAA Diagnostic</title>
+<style>
+html,body{margin:0;background:#101114;color:#fff;font-family:Arial,sans-serif}
+#result{padding:28px;white-space:pre-wrap;word-break:break-all;font-size:26px;line-height:1.35}
+</style>
+</head>
+<body>
+<pre id="result">Діагностика…</pre>
+<script>
+(() => {
+  const result=document.getElementById('result');
+  const tests=[
+    {name:'relative',path:'websdk/Appinfo.json',mode:6},
+    {name:'without_websdk',path:'Appinfo.json',mode:6},
+    {name:'leading_slash',path:'/websdk/Appinfo.json',mode:6}
+  ];
+
+  function safe(v){
+    try{return JSON.stringify(v,null,2)}catch(e){return String(v)}
+  }
+
+  function runTest(t){
+    const out={name:t.name,path:t.path,mode:t.mode};
+    try{
+      out.apiType=typeof window.HiUtils_createRequest;
+      if(out.apiType!=='function') return Object.assign(out,{error:'HiUtils_createRequest is not a function'});
+      const r=window.HiUtils_createRequest('fileRead',{path:t.path,mode:t.mode});
+      out.result=r;
+      out.ret=r&&r.ret;
+      out.sdkVersion=r&&r.sdkVersion;
+      out.code=r&&r.code;
+      if(r&&r.msg){
+        out.msgType=typeof r.msg;
+        if(typeof r.msg==='object') out.msgKeys=Object.keys(r.msg);
+        if(typeof r.msg==='string'){
+          out.msgLength=r.msg.length;
+          try{out.parsedMsg=JSON.parse(r.msg)}catch(e){out.msgParseError=String(e)}
+        }
+      }
+    }catch(e){
+      out.exception=String(e);
+      out.stack=e&&e.stack?e.stack:null;
+    }
+    return out;
+  }
+
+  const diagnostic={
+    diagnosticVersion:'2026-09-08-1',
+    location:location.href,
+    userAgent:navigator.userAgent,
+    api:{
+      HiUtils_createRequest:typeof window.HiUtils_createRequest,
+      Hisense_FileRead:typeof window.Hisense_FileRead,
+      Hisense_FileWrite:typeof window.Hisense_FileWrite
+    },
+    tests:tests.map(runTest)
+  };
+
+  result.textContent=safe(diagnostic);
+})();
+</script>
+</body>
+</html>
