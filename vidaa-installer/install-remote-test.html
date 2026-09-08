@@ -4,40 +4,46 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>VIDAA AppInfo Test</title>
 <style>
-html,body{margin:0;width:100%;height:100%;background:#101114;color:#fff;font-family:Arial,sans-serif}body{display:flex;align-items:center;justify-content:center}.box{width:92%;max-width:1200px;text-align:center}.title{font-size:40px;font-weight:bold;margin-bottom:10px}.sub{font-size:25px;font-weight:bold}.page{font-size:22px;color:#aaa;margin:10px}.text{font-size:21px;line-height:1.42;white-space:pre-wrap;word-break:break-word;text-align:left;height:68vh;overflow:hidden;background:#181a1f;padding:18px;border-radius:10px}.hint{font-size:20px;color:#aaa;margin-top:10px}
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;background:#101114;color:#fff;font-family:Arial,sans-serif;overflow:hidden}body{display:flex;align-items:center;justify-content:center}.box{width:94%;max-width:1200px;text-align:center}.title{font-size:40px;font-weight:bold;margin-bottom:8px}.sub{font-size:25px;font-weight:bold}.page{font-size:22px;color:#aaa;margin:8px}.text{font-size:21px;line-height:1.42;white-space:pre-wrap;word-break:break-word;text-align:left;height:61vh;overflow:hidden;background:#181a1f;padding:18px;border-radius:10px}.nav{display:grid;grid-template-columns:150px 150px 150px;grid-template-rows:64px 64px 64px;gap:8px;justify-content:center;margin:12px auto}.nav button,.run{border:3px solid #777;border-radius:12px;background:#222;color:#fff;font-size:32px;font-weight:bold;min-width:0}.nav button:focus,.run:focus{outline:5px solid #4da3ff;outline-offset:2px;background:#fff;color:#000}.up{grid-column:2}.left{grid-column:1;grid-row:2}.ok{grid-column:2;grid-row:2}.right{grid-column:3;grid-row:2}.down{grid-column:2;grid-row:3}.run{padding:10px 34px;font-size:25px}.hint{font-size:18px;color:#aaa;margin-top:8px}
 </style>
 </head>
 <body>
-<div class="box" id="app" tabindex="0">
+<div class="box">
 <div class="title">VIDAA AppInfo Test</div>
-<div class="sub">OK — запустити тест</div>
+<div class="sub">Навігація через native focus buttons</div>
 <div id="page" class="page"></div>
-<div id="text" class="text">Очікування... Натисни OK</div>
-<div class="hint">↑ ↓ — сторінки &nbsp;&nbsp; OK — запустити &nbsp;&nbsp; 2/8/5 — резервні кнопки</div>
+<div id="text" class="text">Очікування... Натисни OK або кнопку ЗАПУСТИТИ</div>
+<div class="nav" aria-label="Remote navigation">
+ <button class="up" id="up" type="button">↑</button>
+ <button class="left" id="left" type="button">←</button>
+ <button class="ok" id="ok" type="button">OK</button>
+ <button class="right" id="right" type="button">→</button>
+ <button class="down" id="down" type="button">↓</button>
+</div>
+<button class="run" id="run" type="button">ЗАПУСТИТИ ТЕСТ</button>
+<div class="hint">Кнопки зроблені справжніми focusable &lt;button&gt; — перевіряємо native navigation VIDAA.</div>
 </div>
 <script>
 (()=>{
- const app=document.getElementById('app'),text=document.getElementById('text'),page=document.getElementById('page');
+ const text=document.getElementById('text'),page=document.getElementById('page');
+ const up=document.getElementById('up'),down=document.getElementById('down'),left=document.getElementById('left'),right=document.getElementById('right'),ok=document.getElementById('ok'),runBtn=document.getElementById('run');
  let pages=[],idx=0;
- const render=()=>{page.textContent=pages.length?'Сторінка '+(idx+1)+' / '+pages.length:'';text.textContent=pages[idx]||'Очікування... Натисни OK'};
+ const render=()=>{page.textContent=pages.length?'Сторінка '+(idx+1)+' / '+pages.length:'';text.textContent=pages[idx]||'Очікування... Натисни OK або кнопку ЗАПУСТИТИ';};
  const addChunked=(title,s)=>{const n=700;s=String(s);if(!s.length){pages.push(title+'\n\n<empty>');return}for(let i=0;i<s.length;i+=n)pages.push(title+(s.length>n?' ['+(Math.floor(i/n)+1)+']':'')+'\n\n'+s.slice(i,i+n))};
  const safe=v=>{try{return JSON.stringify(v,null,2)}catch(e){return String(v)}};
- const req=()=>window.HiUtils_createRequest;
  let remoteKeyboard='not called';
  try{if(typeof window.Hisense_SetRemoteKeyboard==='function')remoteKeyboard=String(window.Hisense_SetRemoteKeyboard());else remoteKeyboard='API absent'}catch(e){remoteKeyboard='ERROR: '+String(e)}
  function run(){
   pages=[];idx=0;render();
-  const h=req();
+  const h=window.HiUtils_createRequest;
   pages.push('=== STEP 0: HiUtils_createRequest ===\n\nRemote keyboard: '+remoteKeyboard+'\n\ntypeof: '+typeof h+'\nlength: '+(typeof h==='function'?h.length:'-')+'\n\nsource:\n'+(typeof h==='function'?Function.prototype.toString.call(h):'<not a function>'));
   if(typeof h!=='function'){render();return}
-  const path='websdk/Appinfo.json',mode=6;
-  let r;
+  const path='websdk/Appinfo.json',mode=6;let r;
   try{r=h('fileRead',{path,mode})}catch(e){pages.push('=== STEP 1: fileRead BEFORE ===\n\nEXCEPTION:\n'+String(e));render();return}
   pages.push('=== STEP 1: fileRead BEFORE ===\n\ncode: '+(r&&r.code)+'\nmsg type: '+typeof(r&&r.msg)+'\nmsg length: '+String(r&&r.msg||'').length+'\n\nFull response follows on next page(s).');
   addChunked('=== READ BEFORE: response ===',safe(r));
   if(!r||r.code!==0){pages.push('=== STOP ===\n\nREAD DID NOT RETURN code=0.\n\nNO WRITE WAS ATTEMPTED.');render();return}
-  const data=r.msg;
-  let w;
+  const data=r.msg;let w;
   try{w=h('fileWrite',{path,mode,writedata:data})}catch(e){pages.push('=== STEP 2: fileWrite SAME DATA ===\n\nEXCEPTION:\n'+String(e));render();return}
   pages.push('=== STEP 2: fileWrite SAME DATA ===\n\nwritedata length: '+String(data||'').length+'\n\ncode: '+(w&&w.code)+'\n\nFull response follows on next page.');
   addChunked('=== WRITE: response ===',safe(w));
@@ -46,26 +52,16 @@ html,body{margin:0;width:100%;height:100%;background:#101114;color:#fff;font-fam
   pages.push('=== STEP 3: fileRead AFTER ===\n\ncode: '+(a&&a.code)+'\nmsg length: '+String(a&&a.msg||'').length+'\n\nFull response follows on next page(s).');
   addChunked('=== READ AFTER: response ===',safe(a));
   const same=!!(a&&a.code===0&&a.msg===data);
-  pages.push('=== FINAL RESULT ===\n\n'+(same?'ROUNDTRIP: EXACT SAME DATA':'ROUNDTRIP: DATA DIFFERENT OR READ FAILED')+'\n\nThe test wrote the exact data returned by the first fileRead, then read the file again and compared the returned msg byte-for-byte as a JavaScript string.');
+  pages.push('=== FINAL RESULT ===\n\n'+(same?'ROUNDTRIP: EXACT SAME DATA':'ROUNDTRIP: DATA DIFFERENT OR READ FAILED'));
   idx=0;render();
  }
- function keyInfo(e){
-  const key=String(e.key||'');
-  const code=String(e.code||'');
-  const kc=e.keyCode||e.which||0;
-  return {up:key==='ArrowUp'||code==='ArrowUp'||kc===38,down:key==='ArrowDown'||code==='ArrowDown'||kc===40,left:key==='ArrowLeft'||code==='ArrowLeft'||kc===37,right:key==='ArrowRight'||code==='ArrowRight'||kc===39,ok:key==='Enter'||key==='NumpadEnter'||key==='OK'||code==='Enter'||code==='NumpadEnter'||kc===13||kc===352};
- }
- window.addEventListener('keydown',e=>{
-  const k=keyInfo(e);
-  if(k.up||k.left){if(pages.length){e.preventDefault();idx=Math.max(0,idx-1);render()}return}
-  if(k.down||k.right){if(pages.length){e.preventDefault();idx=Math.min(pages.length-1,idx+1);render()}return}
-  if(k.ok){e.preventDefault();run();return}
-  const key=String(e.key||'');
-  if(key==='5'||e.keyCode===53||e.which===53){e.preventDefault();run()}
-  else if(key==='2'||e.keyCode===50||e.which===50){if(pages.length){e.preventDefault();idx=Math.max(0,idx-1);render()}}
-  else if(key==='8'||e.keyCode===56||e.which===56){if(pages.length){e.preventDefault();idx=Math.min(pages.length-1,idx+1);render()}}
- },true);
- app.focus();
+ up.onclick=()=>{if(pages.length){idx=Math.max(0,idx-1);render()}};
+ left.onclick=up.onclick;
+ down.onclick=()=>{if(pages.length){idx=Math.min(pages.length-1,idx+1);render()}};
+ right.onclick=down.onclick;
+ ok.onclick=run;runBtn.onclick=run;
+ // Do not rely on JS arrow key events. Native focusable buttons let VIDAA/browser perform its own spatial navigation.
+ setTimeout(()=>ok.focus(),300);
 })();
 </script>
 </body>
