@@ -2,46 +2,42 @@
 <html lang="uk">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>VIDAA Write Test</title>
+<title>VIDAA API Probe</title>
 <style>
-html,body{margin:0;width:100%;height:100%;background:#101114;color:#fff;font-family:Arial,sans-serif}body{display:flex;align-items:center;justify-content:center}.box{width:86%;max-width:1000px;text-align:center}.title{font-size:42px;font-weight:bold;margin-bottom:24px}p{font-size:30px;font-weight:bold;line-height:1.5}#status{margin-top:28px;font-size:24px;white-space:pre-wrap;word-break:break-word;color:#ddd}
+html,body{margin:0;width:100%;height:100%;background:#101114;color:#fff;font-family:Arial,sans-serif}body{display:flex;align-items:center;justify-content:center}.box{width:90%;max-width:1100px;text-align:center}.title{font-size:42px;font-weight:bold;margin-bottom:22px}p{font-size:30px;font-weight:bold;line-height:1.5}#status{margin-top:24px;font-size:22px;white-space:pre-wrap;word-break:break-word;text-align:left;max-height:70vh;overflow:auto;color:#ddd}
 </style>
 </head>
 <body>
 <div class="box">
-  <div class="title">VIDAA Write Test</div>
-  <p>НАТИСНИ 5 — ПЕРЕВІРИТИ ЗАПИС</p>
-  <div id="status"></div>
+<div class="title">VIDAA API Probe</div>
+<p>НАТИСНИ 5 — ПЕРЕВІРИТИ HiUtils</p>
+<div id="status"></div>
 </div>
 <script>
 (()=>{
  const status=document.getElementById('status');
- const path='websdk/Appinfo.json';
- function msg(s){status.textContent=s}
+ const out=[];
+ const show=()=>status.textContent=out.join('\n\n');
+ const safe=v=>{try{return JSON.stringify(v)}catch(e){return String(v)}};
  function run(){
-   const req=window.HiUtils_createRequest;
-   if(typeof req!=='function'){msg('HiUtils_createRequest НЕДОСТУПНИЙ');return}
-   msg('Читаю Appinfo.json…');
+  out.length=0; show();
+  const req=window.HiUtils_createRequest;
+  out.push('HiUtils_createRequest: '+typeof req);
+  if(typeof req!=='function'){show();return}
+  try{out.push('length: '+req.length);out.push('source:\n'+Function.prototype.toString.call(req).slice(0,1800))}catch(e){out.push('source error: '+e)}
+  const tests=[
+   ['websdk/Appinfo.json',6],
+   ['websdk/Appinfo.json',0],
+   ['websdk/AppInfo.json',6],
+   ['/APPS/websdk/Appinfo.json',6]
+  ];
+  for(const [path,mode] of tests){
    try{
-     const r=req('fileRead',{path:path,mode:6});
-     if(!r||!r.ret){msg('fileRead FAILED\n'+JSON.stringify(r));return}
-     let data;
-     try{data=JSON.parse(r.msg)}catch(e){msg('fileRead OK, але JSON не розібрався:\n'+String(r.msg));return}
-     if(!data||!Array.isArray(data.AppInfo)){msg('fileRead OK, але AppInfo не масив');return}
-     const marker='vidaa_write_test_marker';
-     const item={Id:marker,AppName:'VIDAA Write Test',Title:'VIDAA Write Test',URL:'about:blank',StartCommand:'about:blank',IconURL:'',Icon_96:'',Image:'',Thumb:'',Type:'Browser',InstallTime:new Date().toISOString().split('T')[0],RunTimes:0,StoreType:'custom',PreInstall:false};
-     const i=data.AppInfo.findIndex(a=>a&&a.Id===marker);
-     if(i>=0)data.AppInfo[i]=item;else data.AppInfo.push(item);
-     msg('fileRead OK. Пишу тестовий запис…');
-     const w=req('fileWrite',{path:path,mode:6,writedata:JSON.stringify(data)});
-     if(!w||!w.ret){msg('fileWrite FAILED\n'+JSON.stringify(w));return}
-     msg('fileWrite OK. Перечитую…');
-     const r2=req('fileRead',{path:path,mode:6});
-     if(!r2||!r2.ret){msg('WRITE OK, але повторний READ FAILED\n'+JSON.stringify(r2));return}
-     let d2;try{d2=JSON.parse(r2.msg)}catch(e){msg('WRITE OK, повторний JSON parse FAILED');return}
-     const found=Array.isArray(d2.AppInfo)&&d2.AppInfo.some(a=>a&&a.Id===marker);
-     msg(found?'УСПІХ: fileWrite реально записав Appinfo.json\nТестовий запис знайдений після повторного читання.':'fileWrite повернув OK, але запис НЕ знайдений після повторного читання.');
-   }catch(e){msg('EXCEPTION:\n'+String(e))}
+    const r=req('fileRead',{path:path,mode:mode});
+    out.push('TEST path='+path+' mode='+mode+'\nRETURN: '+safe(r));
+   }catch(e){out.push('TEST path='+path+' mode='+mode+'\nEXCEPTION: '+String(e))}
+  }
+  show();
  }
  window.addEventListener('keydown',e=>{if(String(e.key||'')==='5'||e.keyCode===53||e.which===53){e.preventDefault();run()}},true);
 })();
