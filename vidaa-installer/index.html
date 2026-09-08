@@ -1,83 +1,31 @@
 <!doctype html>
 <html lang="uk">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>VIDAA App Installer</title>
-  <style>
-    *{box-sizing:border-box}body{margin:0;background:#101114;color:#fff;font-family:Arial,sans-serif;font-size:28px}main{padding:40px;max-width:1100px;margin:auto}h1{font-size:42px;margin:0 0 28px}p{margin:14px 0}.card{border:2px solid #555;border-radius:14px;padding:24px;margin:18px 0}.ok{color:#72ff72}.bad{color:#ff7070}.warn{color:#ffd45a}.button{display:block;width:100%;padding:24px;margin-top:18px;border:3px solid #777;border-radius:14px;background:#222;color:#fff;font-size:30px}.button:focus{outline:4px solid #fff;outline-offset:3px}.small{font-size:20px;line-height:1.45;color:#bbb}#result{white-space:pre-wrap;word-break:break-word}
-  </style>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>VIDAA API Test</title>
+<style>*{box-sizing:border-box}body{margin:0;background:#101114;color:#fff;font-family:Arial,sans-serif;font-size:28px}main{padding:40px;max-width:1100px;margin:auto}h1{font-size:42px}.card{border:2px solid #555;border-radius:14px;padding:24px;margin:18px 0}.button{display:block;width:100%;padding:24px;margin-top:18px;border:3px solid #777;border-radius:14px;background:#222;color:#fff;font-size:30px}.button:focus{outline:4px solid #fff;outline-offset:3px}.ok{color:#72ff72}.bad{color:#ff7070}.warn{color:#ffd45a}#result{white-space:pre-wrap;word-break:break-word;font-size:22px;line-height:1.4}</style>
 </head>
-<body>
-<main>
-  <h1>VIDAA — INSTALLER TEST</h1>
-  <div class="card">
-    <p id="firmware">Перевіряю VIDAA API…</p>
-    <p id="api"></p>
-  </div>
-  <div class="card">
-    <p><b>Наш застосунок:</b> Vibecode TV</p>
-    <p class="small">URL: https://accesstopm-wq.github.io/Vibecode/vidaa-test/</p>
-    <button id="install" class="button" tabindex="0">ВСТАНОВИТИ В LAUNCHER</button>
-  </div>
-  <div class="card">
-    <p id="result">Очікую дію…</p>
-  </div>
-  <p class="small">Ця сторінка нічого не змінює сама. Вона лише перевіряє доступні VIDAA System API та запускає встановлення, якщо API доступний.</p>
+<body><main>
+<h1>VIDAA — API TEST</h1>
+<div class="card"><div id="firmware">Перевіряю…</div><div id="api"></div></div>
+<div class="card"><button id="read" class="button" tabindex="0">ПРОЧИТАТИ APPINFO.JSON</button></div>
+<div class="card"><div id="result">Нічого не змінюю. Тільки читаю Appinfo.json.</div></div>
 </main>
 <script>
 (() => {
-  const APP_URL = 'https://accesstopm-wq.github.io/Vibecode/vidaa-test/';
-  const APP_NAME = 'Vibecode TV';
-  const APP_ID = 'VibecodeTV_debug';
-  const ICON = 'https://accesstopm-wq.github.io/Vibecode/vidaa-installer/icon.svg';
-  const $ = id => document.getElementById(id);
-
-  function callSafe(name) {
-    try { return typeof window[name] === 'function' ? window[name]() : null; }
-    catch (e) { return null; }
-  }
-
-  const fw = callSafe('Hisense_GetFirmWareVersion');
-  const model = callSafe('Hisense_GetModelName');
-  $('firmware').textContent = `Firmware: ${fw || 'API недоступний'}${model ? ' | Model: ' + model : ''}`;
-
-  const legacy = typeof window.Hisense_installApp === 'function';
-  const modern = typeof window.HiUtils_createRequest === 'function';
-  $('api').innerHTML = `Hisense_installApp: <span class="${legacy ? 'ok' : 'bad'}">${legacy ? 'ДОСТУПНИЙ' : 'немає'}</span><br>HiUtils_createRequest: <span class="${modern ? 'ok' : 'warn'}">${modern ? 'ДОСТУПНИЙ' : 'немає'}</span>`;
-
-  function result(text, cls='') {
-    $('result').className = cls;
-    $('result').textContent = text;
-  }
-
-  $('install').addEventListener('click', () => {
-    if (typeof window.Hisense_installApp !== 'function') {
-      result('Hisense_installApp НЕ доступний у цьому контексті.\n\nЦе означає, що сторінка запущена не з дозволеного VIDAA install-контексту. Наступний крок — DNS/vidaahub-сценарій для твоєї VIDAA 10.', 'warn');
-      return;
-    }
-    result('Викликаю Hisense_installApp…');
-    try {
-      window.Hisense_installApp(
-        APP_ID,
-        APP_NAME,
-        ICON,
-        ICON,
-        ICON,
-        APP_URL,
-        'store',
-        status => {
-          result(`Callback status: ${status}\n\nЯкщо встановлення успішне — відкрий Launcher / Apps і шукай “Vibecode TV”.`, status ? 'bad' : 'ok');
-          try { if (typeof window.refreshAppsOnHisenseUI === 'function') window.refreshAppsOnHisenseUI(APP_ID); } catch(e) {}
-        }
-      );
-    } catch (e) {
-      result('Помилка виклику:\n' + (e && e.stack ? e.stack : e), 'bad');
-    }
-  });
-
-  $('install').focus();
+const $=id=>document.getElementById(id);
+let modern=typeof window.HiUtils_createRequest==='function';
+let fw=null,model=null;
+try{fw=typeof window.Hisense_GetFirmWareVersion==='function'?window.Hisense_GetFirmWareVersion():null}catch(e){}
+try{model=typeof window.Hisense_GetModelName==='function'?window.Hisense_GetModelName():null}catch(e){}
+$('firmware').textContent=`Firmware: ${fw||'невідомо'}${model?' | Model: '+model:''}`;
+$('api').innerHTML=`HiUtils_createRequest: <span class="${modern?'ok':'bad'}">${modern?'ДОСТУПНИЙ':'НЕМАЄ'}</span>`;
+$('read').addEventListener('click',()=>{
+ if(!modern){$('result').textContent='HiUtils_createRequest недоступний.';return;}
+ try{
+   const r=window.HiUtils_createRequest('fileRead',{path:'websdk/Appinfo.json',mode:6});
+   $('result').textContent='RET: '+r.ret+'\n\nMSG:\n'+String(r.msg||'(порожньо)');
+ }catch(e){$('result').textContent='ПОМИЛКА:\n'+(e&&e.stack?e.stack:e);}
+});
+$('read').focus();
 })();
-</script>
-</body>
-</html>
+</script></body></html>
