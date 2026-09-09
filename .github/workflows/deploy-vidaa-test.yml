@@ -9,6 +9,7 @@ on:
       - 'vidaa-diagnostic/**'
       - 'vidaa-player/**'
       - 'vidaa-remote-test/**'
+      - 'youtube-player/**'
       - '.github/workflows/deploy-vidaa-test.yml'
   workflow_dispatch:
 
@@ -37,15 +38,17 @@ jobs:
           mkdir -p _site
           cp -r vidaa-test/* _site/
           mkdir -p _site/vidaa-installer
-          cp -r vidaa-installer/* _site/vidaa-installer/
+          cp -r vidaa-installer/* _site/vidaa-installer
           mkdir -p _site/vidaa-appinfo
-          cp -r vidaa-appinfo/* _site/vidaa-appinfo/
+          cp -r vidaa-appinfo/* _site/vidaa-appinfo
           mkdir -p _site/vidaa-diagnostic
-          cp -r vidaa-diagnostic/* _site/vidaa-diagnostic/
+          cp -r vidaa-diagnostic/* _site/vidaa-diagnostic
           mkdir -p _site/vidaa-player
-          cp -r vidaa-player/* _site/vidaa-player/
+          cp -r vidaa-player/* _site/vidaa-player
           mkdir -p _site/vidaa-remote-test
-          cp -r vidaa-remote-test/* _site/vidaa-remote-test/
+          cp -r vidaa-remote-test/* _site/vidaa-remote-test
+          mkdir -p _site/youtube-player
+          cp -r youtube-player/* _site/youtube-player
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
