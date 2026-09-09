@@ -70,9 +70,12 @@ def extract_url(value):
     url = "https://www.youtube.com/watch?v=" + vid
     pot_args = "youtubepot-bgutilhttp:base_url=" + POT_URL
     attempts = [
+        # These clients do not require the mweb GVS PO token. Prefer them before
+        # the PO-token-dependent client because YouTube may bot-check mweb.
+        ("youtube:player_client=android_vr", "best[ext=mp4][height<=720]/best[height<=720]/best"),
+        ("youtube:player_client=web_embedded", "best[ext=mp4][height<=720]/best[height<=720]/best"),
+        ("youtube:player_client=tv", "best[ext=mp4][height<=720]/best[height<=720]/best"),
         ("youtube:player_client=mweb;" + pot_args, "best[ext=mp4][height<=720]/best[height<=720]/best"),
-        ("youtube:player_client=web_embedded;" + pot_args, "best[ext=mp4][height<=720]/best[height<=720]/best"),
-        ("youtube:player_client=tv;" + pot_args, "best[ext=mp4][height<=720]/best[height<=720]/best"),
         (pot_args, "best[ext=mp4][height<=720]/best[ext=mp4]/best"),
     ]
     errors = []
