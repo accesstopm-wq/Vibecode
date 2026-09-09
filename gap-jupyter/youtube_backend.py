@@ -4,6 +4,7 @@ import os
 import re
 import subprocess
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse, unquote
 
@@ -12,17 +13,64 @@ PORT = int(os.environ.get("YOUTUBE_BACKEND_PORT", "8765"))
 YTDLP = os.environ.get("YTDLP_BIN", "yt-dlp")
 DENO = os.environ.get("DENO_BIN", "/opt/gap/.deno/bin/deno")
 POT_URL = os.environ.get("YOUTUBE_POT_URL", "http://127.0.0.1:4416")
-PIPED_INSTANCES = [
+PIPED_WIKI = "https://raw.githubusercontent.com/TeamPiped/Piped.wiki/master/Instances.md"
+PIPED_STATIC = [
     "https://pipedapi.kavin.rocks",
     "https://pipedapi.tokhmi.xyz",
     "https://pipedapi.syncpundit.io",
     "https://api-piped.mha.fi",
     "https://piped-api.garudalinux.org",
+    "https://pipedapi.moomoo.me",
+    "https://pipedapi.rivo.lol",
+    "https://pipedapi.leptons.xyz",
+    "https://piped-api.lunar.icu",
+    "https://ytapi.dc09.ru",
+    "https://pipedapi.colinslegacy.com",
+    "https://yapi.vyper.me",
+    "https://api.looleh.xyz",
+    "https://piped-api.cfe.re",
+    "https://pipedapi.r4fo.com",
+    "https://pipedapi.darkness.services",
+    "https://pipedapi-libre.kavin.rocks",
+    "https://pa.mint.lgbt",
+    "https://pa.il.ax",
+    "https://piped-api.privacy.com.de",
+    "https://api.piped.projectsegfau.lt",
+    "https://pipedapi.in.projectsegfau.lt",
+    "https://pipedapi.us.projectsegfau.lt",
+    "https://watchapi.whatever.social",
+    "https://api.piped.privacydev.net",
+    "https://pipedapi.palveluntarjoaja.eu",
+    "https://pipedapi.smnz.de",
+    "https://pipedapi.adminforge.de",
+    "https://pipedapi.qdi.fi",
+    "https://piped-api.hostux.net",
+    "https://pdapi.vern.cc",
+    "https://pipedapi.pfcd.me",
+    "https://pipedapi.frontendfriendly.xyz",
+    "https://api.piped.yt",
+    "https://pipedapi.astartes.nl",
+    "https://pipedapi.osphost.fi",
+    "https://pipedapi.simpleprivacy.fr",
+    "https://pipedapi.drgns.space",
+    "https://piapi.ggtyler.dev",
+    "https://api.watch.pluto.lat",
+    "https://piped-backend.seitan-ayoub.lol",
+    "https://pipedapi.owo.si",
+    "https://api.piped.minionflo.net",
+    "https://pipedapi.nezumi.party",
+    "https://pipedapi.ducks.party",
+    "https://pipedapi.ngn.tf",
+    "https://pipedapi.coldforge.xyz",
+    "https://piped-api.codespace.cz",
+    "https://pipedapi.reallyaweso.me",
+    "https://pipedapi.phoenixthrush.com",
+    "https://api.piped.private.coffee",
 ]
 
-YOUTUBE_RE = re.compile(r"(?:youtu\\.be/|youtube\\.com/(?:watch\\?v=|embed/|shorts/|live/))([A-Za-z0-9_-]{11})")
+YOUTUBE_RE = re.compile(r"(?:youtu\.be/|youtube\.com/(?:watch\?v=|embed/|shorts/|live/))([A-Za-z0-9_-]{11})")
 ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
-CALLBACK_RE = re.compile(r"^[A-Za-z_$][A-Za-z0-9_$\\.]*$")
+CALLBACK_RE = re.compile(r"^[A-Za-z_$][A-Za-z0-9_$.]*$")
 
 
 def video_id(value):
@@ -61,26 +109,58 @@ def run_ytdlp(url, extractor_args, fmt):
     raise RuntimeError((result.stderr or result.stdout or "yt-dlp failed").strip()[-1200:])
 
 
+def get_piped_instances():
+    instances = list(PIPED_STATIC)
+    try:
+        req = urllib.request.Request(PIPED_WIKI, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=8) as response:
+            text = response.read().decode("utf-8", "replace")
+        found = re.findall(r"\|\s*(https://[^|\s]+)\s*\|", text)
+        for url in found:
+            url = url.rstrip("/").rstrip(")")
+            if url not in instances and "piped" in url.lower():
+                instances.append(url)
+    except Exception:
+        pass
+    return instances
+
+
+def probe_piped(base, vid):
+    req = urllib.request.Request(base.rstrip("/") + "/streams/" + vid, headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(req, timeout=8) as response:
+        data = json.loads(response.read().decode("utf-8"))
+    streams = data.get("videoStreams", [])
+    candidates = []
+    for stream in streams:
+        if stream.get("videoOnly") or not stream.get("url"):
+            continue
+        mime = str(stream.get("mimeType") or "").lower()
+        fmt = str(stream.get("format") or "").upper()
+        if mime.startswith("video/mp4") or fmt == "MPEG_4":
+            try:
+                height = int(stream.get("height") or 0)
+            except Exception:
+                height = 0
+            candidates.append((height, stream["url"]))
+    candidates = [x for x in candidates if x[0] <= 720] or candidates
+    if not candidates:
+        raise RuntimeError("no compatible MP4 stream")
+    candidates.sort(reverse=True)
+    return candidates[0][1]
+
+
 def run_piped(vid):
+    instances = get_piped_instances()
     errors = []
-    for base in PIPED_INSTANCES:
-        try:
-            req = urllib.request.Request(base + "/streams/" + vid, headers={"User-Agent": "Mozilla/5.0"})
-            with urllib.request.urlopen(req, timeout=15) as response:
-                data = json.loads(response.read().decode("utf-8"))
-            streams = data.get("videoStreams", [])
-            candidates = [s for s in streams if not s.get("videoOnly") and s.get("url") and s.get("format") == "MPEG_4" and int(s.get("height") or 9999) <= 720]
-            candidates.sort(key=lambda s: int(s.get("height") or 0), reverse=True)
-            if candidates:
-                return candidates[0]["url"]
-            candidates = [s for s in streams if not s.get("videoOnly") and s.get("url") and s.get("format") == "MPEG_4"]
-            candidates.sort(key=lambda s: int(s.get("height") or 0), reverse=True)
-            if candidates:
-                return candidates[0]["url"]
-            errors.append(base + ": no compatible MP4 stream")
-        except Exception as exc:
-            errors.append(base + ": " + str(exc))
-    raise RuntimeError("Piped fallback failed: " + "; ".join(errors)[-1400:])
+    with ThreadPoolExecutor(max_workers=min(12, len(instances))) as pool:
+        futures = {pool.submit(probe_piped, base, vid): base for base in instances}
+        for future in as_completed(futures):
+            base = futures[future]
+            try:
+                return future.result()
+            except Exception as exc:
+                errors.append(base + ": " + str(exc))
+    raise RuntimeError("Piped fallback failed: " + "; ".join(errors)[-1800:])
 
 
 def extract_url(value):
