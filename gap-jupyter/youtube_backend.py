@@ -95,9 +95,12 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def send_jsonp(self, status, payload, callback):
+    def send_jsonp(self, payload, callback):
+        # JSONP is loaded through a <script> tag on old VIDAA browsers.
+        # Always return HTTP 200 so backend errors reach the JS callback
+        # instead of becoming the browser's generic script onerror/network error.
         body = (callback + "(" + json.dumps(payload, ensure_ascii=False) + ");").encode("utf-8")
-        self.send_response(status)
+        self.send_response(200)
         self.send_header("Content-Type", "application/javascript; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
@@ -132,25 +135,25 @@ class Handler(BaseHTTPRequestHandler):
             vid, stream_url = extract_url(value)
             payload = {"ok": True, "videoId": vid, "url": stream_url}
             if callback:
-                self.send_jsonp(200, payload, callback)
+                self.send_jsonp(payload, callback)
             else:
                 self.send_json(200, payload)
         except ValueError as exc:
             payload = {"ok": False, "error": str(exc)}
             if callback:
-                self.send_jsonp(400, payload, callback)
+                self.send_jsonp(payload, callback)
             else:
                 self.send_json(400, payload)
         except subprocess.TimeoutExpired:
             payload = {"ok": False, "error": "yt-dlp timed out"}
             if callback:
-                self.send_jsonp(504, payload, callback)
+                self.send_jsonp(payload, callback)
             else:
                 self.send_json(504, payload)
         except Exception as exc:
             payload = {"ok": False, "error": str(exc)}
             if callback:
-                self.send_jsonp(502, payload, callback)
+                self.send_jsonp(payload, callback)
             else:
                 self.send_json(502, payload)
 
