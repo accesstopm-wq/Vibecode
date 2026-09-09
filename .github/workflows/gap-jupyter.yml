@@ -33,7 +33,7 @@ jobs:
       - name: Pull GAP + JupyterLab image
         run: docker pull ghcr.io/gap-system/jupyter-gap:4.15.0-full
 
-      - name: Start GAP, Telegram bot and YouTube backend
+      - name: Start GAP, Telegram bot, PO token provider and YouTube backend
         env:
           JUPYTER_TOKEN: ${{ github.run_id }}-${{ github.run_attempt }}-gap
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -53,7 +53,7 @@ jobs:
             -e YOUTUBE_BACKEND_PORT=8765 \
             -v "$GITHUB_WORKSPACE/gap-jupyter:/workspace" \
             ghcr.io/gap-system/jupyter-gap:4.15.0-full \
-            sh -lc 'set -e; ln -sf /workspace/save-to-github.py /opt/gap/.local/bin/save-to-github; python3 -m pip install --user --no-cache-dir "jupyterlab==3.6.8" "notebook==6.5.7" "python-telegram-bot" "requests" "yt-dlp"; curl -fsSL https://deno.land/install.sh | sh; nohup python3 /workspace/youtube_backend.py > /workspace/youtube-backend.log 2>&1 & echo $! > /tmp/youtube-backend.pid; python3 /workspace/bot.py > /workspace/bot.log 2>&1 & echo $! > /tmp/bot.pid; exec jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --ServerApp.token="$JUPYTER_TOKEN" --ServerApp.root_dir=/workspace --ServerApp.allow_remote_access=True --ServerApp.trust_xheaders=True --ServerApp.allow_origin="*"'
+            sh -lc 'set -e; ln -sf /workspace/save-to-github.py /opt/gap/.local/bin/save-to-github; python3 -m pip install --user --no-cache-dir "jupyterlab==3.6.8" "notebook==6.5.7" "python-telegram-bot" "requests" "yt-dlp" "bgutil-ytdlp-pot-provider"; curl -fsSL https://deno.land/install.sh | sh; rm -rf /workspace/bgutil-ytdlp-pot-provider; git clone --depth 1 --branch 2.0.0 https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git /workspace/bgutil-ytdlp-pot-provider; cd /workspace/bgutil-ytdlp-pot-provider/server; deno install --allow-scripts=npm:canvas --frozen; nohup deno run --allow-env --allow-net --allow-ffi=. --allow-read=. src/main.ts --host 127.0.0.1 --port 4416 > /workspace/bgutil.log 2>&1 & echo $! > /tmp/bgutil.pid; cd /workspace; nohup python3 /workspace/youtube_backend.py > /workspace/youtube-backend.log 2>&1 & echo $! > /tmp/youtube-backend.pid; python3 /workspace/bot.py > /workspace/bot.log 2>&1 & echo $! > /tmp/bot.pid; exec jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --ServerApp.token="$JUPYTER_TOKEN" --ServerApp.root_dir=/workspace --ServerApp.allow_remote_access=True --ServerApp.trust_xheaders=True --ServerApp.allow_origin="*"'
 
           echo "Waiting for JupyterLab and GAP kernel..."
           for i in {1..90}; do
@@ -64,6 +64,20 @@ jobs:
             if [ "$i" -eq 90 ]; then
               echo "JupyterLab failed to start."
               docker logs gap-jupyter || true
+              exit 1
+            fi
+            sleep 2
+          done
+
+          echo "Waiting for PO token provider..."
+          for i in {1..90}; do
+            if curl -fsS http://127.0.0.1:4416/ >/dev/null 2>&1 || curl -fsS http://127.0.0.1:4416/health >/dev/null 2>&1; then
+              echo "PO token provider is ready."
+              break
+            fi
+            if [ "$i" -eq 90 ]; then
+              echo "PO token provider failed to start."
+              docker exec gap-jupyter sh -lc 'cat /workspace/bgutil.log 2>/dev/null || true'
               exit 1
             fi
             sleep 2
@@ -93,6 +107,8 @@ jobs:
           docker exec gap-jupyter sh -lc 'command -v gap; command -v jupyter-kernel-gap; echo JUPYTER_GAP_EXECUTABLE=$JUPYTER_GAP_EXECUTABLE; command -v save-to-github'
           echo "GAP package check:"
           docker exec gap-jupyter gap -q -c 'Print(LoadPackage("JupyterKernel"),"\n"); QUIT;'
+          echo "PO token provider log:"
+          docker exec gap-jupyter sh -lc 'tail -50 /workspace/bgutil.log 2>/dev/null || true'
           echo "YouTube backend health:"
           curl -fsS http://127.0.0.1:8765/health
           echo
