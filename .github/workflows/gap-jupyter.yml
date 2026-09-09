@@ -181,6 +181,21 @@ jobs:
           fi
 
           echo "YouTube backend: $YOUTUBE_URL"
+          echo "Checking public YouTube backend through Cloudflare..."
+          PUBLIC_HEALTH=""
+          for i in {1..30}; do
+            PUBLIC_HEALTH=$(curl -fsS --max-time 10 "$YOUTUBE_URL/health" 2>/dev/null || true)
+            if echo "$PUBLIC_HEALTH" | grep -q 'youtube-backend'; then
+              echo "Public YouTube backend is reachable: $PUBLIC_HEALTH"
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "Public YouTube backend is NOT reachable. Refusing to publish a dead URL."
+              cat youtube-tunnel.log || true
+              exit 1
+            fi
+            sleep 2
+          done
 
           CONFIG_URL="https://api.github.com/repos/$GITHUB_REPOSITORY/contents/youtube-player/backend-url.json"
           CURRENT_SHA=$(curl -fsSL \
@@ -204,6 +219,7 @@ jobs:
             --data "$PAYLOAD" >/tmp/backend-url-update.json
 
           echo "Backend URL published to youtube-player/backend-url.json"
+          echo "The Pages frontend reads this file dynamically; no Pages rebuild is required when the GAP tunnel URL changes."
           echo "============================================================"
           echo "GAP JUPYTERLAB IS READY"
           echo "JUPYTER_URL: ${JUPYTER_URL}/lab?token=${JUPYTER_TOKEN}"
