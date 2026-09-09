@@ -10,6 +10,7 @@ HOST = "0.0.0.0"
 PORT = int(os.environ.get("YOUTUBE_BACKEND_PORT", "8765"))
 YTDLP = os.environ.get("YTDLP_BIN", "yt-dlp")
 DENO = os.environ.get("DENO_BIN", "/opt/gap/.deno/bin/deno")
+POT_URL = os.environ.get("YOUTUBE_POT_URL", "http://127.0.0.1:4416")
 
 YOUTUBE_RE = re.compile(r"(?:youtu\.be/|youtube\.com/(?:watch\?v=|embed/|shorts/|live/))([A-Za-z0-9_-]{11})")
 ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
@@ -67,11 +68,12 @@ def extract_url(value):
         raise ValueError("Invalid YouTube URL or video ID")
 
     url = "https://www.youtube.com/watch?v=" + vid
+    pot_args = "youtubepot-bgutilhttp:base_url=" + POT_URL
     attempts = [
-        ("youtube:player_client=web_safari", "best[protocol^=m3u8]/best"),
-        ("youtube:player_client=web_embedded", "best[ext=mp4][height<=720]/best[height<=720]/best"),
-        ("youtube:player_client=tv", "best[ext=mp4][height<=720]/best[height<=720]/best"),
-        ("", "best[ext=mp4][height<=720]/best[ext=mp4]/best"),
+        ("youtube:player_client=mweb;" + pot_args, "best[ext=mp4][height<=720]/best[height<=720]/best"),
+        ("youtube:player_client=web_embedded;" + pot_args, "best[ext=mp4][height<=720]/best[height<=720]/best"),
+        ("youtube:player_client=tv;" + pot_args, "best[ext=mp4][height<=720]/best[height<=720]/best"),
+        (pot_args, "best[ext=mp4][height<=720]/best[ext=mp4]/best"),
     ]
     errors = []
     for extractor_args, fmt in attempts:
