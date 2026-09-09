@@ -53,47 +53,26 @@ jobs:
             -e YOUTUBE_BACKEND_PORT=8765 \
             -v "$GITHUB_WORKSPACE/gap-jupyter:/workspace" \
             ghcr.io/gap-system/jupyter-gap:4.15.0-full \
-            sh -lc 'set -e; ln -sf /workspace/save-to-github.py /opt/gap/.local/bin/save-to-github; python3 -m pip install --user --no-cache-dir "jupyterlab==3.6.8" "notebook==6.5.7" "python-telegram-bot" "requests" "yt-dlp" "bgutil-ytdlp-pot-provider"; curl -fsSL https://deno.land/install.sh | sh; rm -rf /workspace/bgutil-ytdlp-pot-provider; git clone --depth 1 --branch 2.0.0 https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git /workspace/bgutil-ytdlp-pot-provider; cd /workspace/bgutil-ytdlp-pot-provider/server; deno install --allow-scripts=npm:canvas --frozen; nohup deno run --allow-env --allow-net --allow-ffi=. --allow-read=. src/main.ts --host 127.0.0.1 --port 4416 > /workspace/bgutil.log 2>&1 & echo $! > /tmp/bgutil.pid; cd /workspace; nohup python3 /workspace/youtube_backend.py > /workspace/youtube-backend.log 2>&1 & echo $! > /tmp/youtube-backend.pid; python3 /workspace/bot.py > /workspace/bot.log 2>&1 & echo $! > /tmp/bot.pid; exec jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --ServerApp.token="$JUPYTER_TOKEN" --ServerApp.root_dir=/workspace --ServerApp.allow_remote_access=True --ServerApp.trust_xheaders=True --ServerApp.allow_origin="*"'
+            sh -lc 'set -e; ln -sf /workspace/save-to-github.py /opt/gap/.local/bin/save-to-github; python3 -m pip install --user --no-cache-dir "jupyterlab==3.6.8" "notebook==6.5.7" "python-telegram-bot" "requests" "yt-dlp" "bgutil-ytdlp-pot-provider"; curl -fsSL https://deno.land/install.sh | sh; export PATH="/opt/gap/.deno/bin:$PATH"; rm -rf /workspace/bgutil-ytdlp-pot-provider; git clone --depth 1 --branch 2.0.0 https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git /workspace/bgutil-ytdlp-pot-provider; cd /workspace/bgutil-ytdlp-pot-provider/server; /opt/gap/.deno/bin/deno install --allow-scripts=npm:canvas --frozen; nohup /opt/gap/.deno/bin/deno run --allow-env --allow-net --allow-ffi=. --allow-read=. src/main.ts --host 127.0.0.1 --port 4416 > /workspace/bgutil.log 2>&1 & echo $! > /tmp/bgutil.pid; cd /workspace; nohup python3 /workspace/youtube_backend.py > /workspace/youtube-backend.log 2>&1 & echo $! > /tmp/youtube-backend.pid; python3 /workspace/bot.py > /workspace/bot.log 2>&1 & echo $! > /tmp/bot.pid; exec jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --ServerApp.token="$JUPYTER_TOKEN" --ServerApp.root_dir=/workspace --ServerApp.allow_remote_access=True --ServerApp.trust_xheaders=True --ServerApp.allow_origin="*"'
 
           echo "Waiting for JupyterLab and GAP kernel..."
           for i in {1..90}; do
-            if curl -fsS http://127.0.0.1:8888/lab >/dev/null 2>&1; then
-              echo "JupyterLab is ready."
-              break
-            fi
-            if [ "$i" -eq 90 ]; then
-              echo "JupyterLab failed to start."
-              docker logs gap-jupyter || true
-              exit 1
-            fi
+            if curl -fsS http://127.0.0.1:8888/lab >/dev/null 2>&1; then echo "JupyterLab is ready."; break; fi
+            if [ "$i" -eq 90 ]; then echo "JupyterLab failed to start."; docker logs gap-jupyter || true; exit 1; fi
             sleep 2
           done
 
           echo "Waiting for PO token provider..."
           for i in {1..90}; do
-            if curl -fsS http://127.0.0.1:4416/ >/dev/null 2>&1 || curl -fsS http://127.0.0.1:4416/health >/dev/null 2>&1; then
-              echo "PO token provider is ready."
-              break
-            fi
-            if [ "$i" -eq 90 ]; then
-              echo "PO token provider failed to start."
-              docker exec gap-jupyter sh -lc 'cat /workspace/bgutil.log 2>/dev/null || true'
-              exit 1
-            fi
+            if curl -fsS http://127.0.0.1:4416/ >/dev/null 2>&1 || curl -fsS http://127.0.0.1:4416/health >/dev/null 2>&1; then echo "PO token provider is ready."; break; fi
+            if [ "$i" -eq 90 ]; then echo "PO token provider failed to start."; docker exec gap-jupyter sh -lc 'cat /workspace/bgutil.log 2>/dev/null || true'; exit 1; fi
             sleep 2
           done
 
           echo "Waiting for YouTube backend..."
           for i in {1..60}; do
-            if curl -fsS http://127.0.0.1:8765/health >/dev/null 2>&1; then
-              echo "YouTube backend is ready."
-              break
-            fi
-            if [ "$i" -eq 60 ]; then
-              echo "YouTube backend failed to start."
-              docker logs gap-jupyter || true
-              exit 1
-            fi
+            if curl -fsS http://127.0.0.1:8765/health >/dev/null 2>&1; then echo "YouTube backend is ready."; break; fi
+            if [ "$i" -eq 60 ]; then echo "YouTube backend failed to start."; docker logs gap-jupyter || true; exit 1; fi
             sleep 2
           done
 
@@ -119,7 +98,6 @@ jobs:
         run: |
           docker exec -i gap-jupyter python3 - <<'PY'
           from jupyter_client import KernelManager
-
           km = KernelManager(kernel_name="gap-4")
           km.start_kernel(cwd="/workspace")
           kc = km.client()
@@ -130,33 +108,23 @@ jobs:
               got_result = False
               while True:
                   msg = kc.get_iopub_msg(timeout=30)
-                  if msg["parent_header"].get("msg_id") != msg_id:
-                      continue
+                  if msg["parent_header"].get("msg_id") != msg_id: continue
                   typ = msg["msg_type"]
                   content = msg["content"]
                   if typ == "execute_result":
-                      print("GAP EXECUTE_RESULT:", content["data"])
-                      got_result = True
-                  elif typ == "stream":
-                      print("GAP STREAM:", content["text"], end="")
-                  elif typ == "error":
-                      print("GAP ERROR:", content["ename"], content["evalue"])
-                      raise SystemExit(1)
-                  elif typ == "status" and content["execution_state"] == "idle":
-                      break
-              if not got_result:
-                  raise RuntimeError("GAP kernel reached idle without an execute_result")
+                      print("GAP EXECUTE_RESULT:", content["data"]); got_result = True
+                  elif typ == "stream": print("GAP STREAM:", content["text"], end="")
+                  elif typ == "error": raise SystemExit(1)
+                  elif typ == "status" and content["execution_state"] == "idle": break
+              if not got_result: raise RuntimeError("GAP kernel reached idle without an execute_result")
               print("GAP KERNEL TEST: OK")
           finally:
-              kc.stop_channels()
-              km.shutdown_kernel(now=True)
+              kc.stop_channels(); km.shutdown_kernel(now=True)
           PY
 
       - name: Install cloudflared
         run: |
-          curl -L --fail --retry 3 \
-            -o cloudflared \
-            https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+          curl -L --fail --retry 3 -o cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
           chmod +x cloudflared
 
       - name: Start Cloudflare tunnels
@@ -166,85 +134,40 @@ jobs:
         run: |
           nohup ./cloudflared tunnel --url http://127.0.0.1:8888 > tunnel.log 2>&1 &
           JUPYTER_TUNNEL_PID=$!
-
           JUPYTER_URL=""
           for i in {1..60}; do
             JUPYTER_URL=$(grep -oE 'https://[-a-zA-Z0-9]+\.trycloudflare\.com' tunnel.log | head -1 || true)
-            if [ -n "$JUPYTER_URL" ]; then
-              break
-            fi
+            [ -n "$JUPYTER_URL" ] && break
             sleep 2
           done
-
-          if [ -z "$JUPYTER_URL" ]; then
-            echo "Jupyter Cloudflare tunnel failed to start."
-            cat tunnel.log
-            exit 1
-          fi
+          test -n "$JUPYTER_URL"
 
           nohup ./cloudflared tunnel --url http://127.0.0.1:8765 > youtube-tunnel.log 2>&1 &
           YOUTUBE_TUNNEL_PID=$!
-
           YOUTUBE_URL=""
           for i in {1..60}; do
             YOUTUBE_URL=$(grep -oE 'https://[-a-zA-Z0-9]+\.trycloudflare\.com' youtube-tunnel.log | head -1 || true)
-            if [ -n "$YOUTUBE_URL" ]; then
-              break
-            fi
+            [ -n "$YOUTUBE_URL" ] && break
             sleep 2
           done
-
-          if [ -z "$YOUTUBE_URL" ]; then
-            echo "YouTube Cloudflare tunnel failed to start."
-            cat youtube-tunnel.log
-            exit 1
-          fi
+          test -n "$YOUTUBE_URL"
 
           echo "YouTube backend: $YOUTUBE_URL"
-          echo "Checking public YouTube backend through Cloudflare..."
-          PUBLIC_HEALTH=""
           for i in {1..30}; do
             PUBLIC_HEALTH=$(curl -fsS --max-time 10 "$YOUTUBE_URL/health" 2>/dev/null || true)
-            if echo "$PUBLIC_HEALTH" | grep -q 'youtube-backend'; then
-              echo "Public YouTube backend is reachable: $PUBLIC_HEALTH"
-              break
-            fi
-            if [ "$i" -eq 30 ]; then
-              echo "Public YouTube backend is NOT reachable. Refusing to publish a dead URL."
-              cat youtube-tunnel.log || true
-              exit 1
-            fi
+            if echo "$PUBLIC_HEALTH" | grep -q 'youtube-backend'; then echo "Public YouTube backend is reachable: $PUBLIC_HEALTH"; break; fi
+            [ "$i" -eq 30 ] && { cat youtube-tunnel.log || true; exit 1; }
             sleep 2
           done
 
           CONFIG_URL="https://api.github.com/repos/$GITHUB_REPOSITORY/contents/youtube-player/backend-url.json"
-          CURRENT_SHA=$(curl -fsSL \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "$CONFIG_URL" | jq -r '.sha')
-
+          CURRENT_SHA=$(curl -fsSL -H "Accept: application/vnd.github+json" -H "Authorization: Bearer $GH_TOKEN" -H "X-GitHub-Api-Version: 2022-11-28" "$CONFIG_URL" | jq -r '.sha')
           CONTENT=$(printf '{\n  "apiBase": "%s"\n}\n' "$YOUTUBE_URL" | base64 -w 0)
-          PAYLOAD=$(jq -n \
-            --arg message "Update live YouTube backend URL" \
-            --arg content "$CONTENT" \
-            --arg sha "$CURRENT_SHA" \
-            '{message:$message,content:$content,sha:$sha,branch:"main"}')
-
-          curl -fsSL -X PUT \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "$CONFIG_URL" \
-            --data "$PAYLOAD" >/tmp/backend-url-update.json
-
-          echo "Backend URL published to youtube-player/backend-url.json"
-          echo "The Pages frontend reads this file dynamically; no Pages rebuild is required when the GAP tunnel URL changes."
-          echo "============================================================"
-          echo "GAP JUPYTERLAB IS READY"
+          PAYLOAD=$(jq -n --arg message "Update live YouTube backend URL" --arg content "$CONTENT" --arg sha "$CURRENT_SHA" '{message:$message,content:$content,sha:$sha,branch:"main"}')
+          curl -fsSL -X PUT -H "Accept: application/vnd.github+json" -H "Authorization: Bearer $GH_TOKEN" -H "X-GitHub-Api-Version: 2022-11-28" "$CONFIG_URL" --data "$PAYLOAD" >/tmp/backend-url-update.json
+          echo "Backend URL published."
           echo "JUPYTER_URL: ${JUPYTER_URL}/lab?token=${JUPYTER_TOKEN}"
           echo "YOUTUBE_BACKEND_URL: ${YOUTUBE_URL}"
-          echo "============================================================"
           echo "JUPYTER_TUNNEL_PID=$JUPYTER_TUNNEL_PID" >> "$GITHUB_ENV"
           echo "YOUTUBE_TUNNEL_PID=$YOUTUBE_TUNNEL_PID" >> "$GITHUB_ENV"
 
@@ -252,29 +175,15 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          nohup bash -c '
-            sleep 18000
-            curl -fsS -X POST \
-              -H "Accept: application/vnd.github+json" \
-              -H "Authorization: Bearer $GH_TOKEN" \
-              -H "X-GitHub-Api-Version: 2022-11-28" \
-              "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/gap-jupyter.yml/dispatches" \
-              -d "{\"ref\":\"main\"}"
-          ' >/tmp/next-restart.log 2>&1 &
+          nohup bash -c 'sleep 18000; curl -fsS -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer $GH_TOKEN" -H "X-GitHub-Api-Version: 2022-11-28" "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/gap-jupyter.yml/dispatches" -d "{\"ref\":\"main\"}"' >/tmp/next-restart.log 2>&1 &
           echo "Next GAP run will be dispatched in 5 hours."
 
       - name: Keep Jupyter, Telegram bot and YouTube backend alive
         run: |
-          echo "GAP, Telegram bot and YouTube backend will remain available until the next 5-hour restart."
           while kill -0 "$JUPYTER_TUNNEL_PID" 2>/dev/null && kill -0 "$YOUTUBE_TUNNEL_PID" 2>/dev/null; do
-            if ! docker ps --format '{{.Names}}' | grep -qx 'gap-jupyter'; then
-              echo "Jupyter container stopped."
-              docker logs gap-jupyter || true
-              exit 1
-            fi
+            docker ps --format '{{.Names}}' | grep -qx 'gap-jupyter' || exit 1
             sleep 30
           done
-          echo "One of the Cloudflare tunnels stopped."
           cat tunnel.log || true
           cat youtube-tunnel.log || true
           docker logs gap-jupyter || true
