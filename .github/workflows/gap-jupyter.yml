@@ -1,6 +1,10 @@
 name: GAP JupyterLab
 
 on:
+  push:
+    paths:
+      - 'gap-jupyter/youtube_backend.py'
+      - '.github/workflows/gap-jupyter.yml'
   workflow_dispatch:
 
 concurrency:
