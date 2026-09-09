@@ -11,14 +11,31 @@ PORT = int(os.environ.get("YOUTUBE_BACKEND_PORT", "8765"))
 YTDLP = os.environ.get("YTDLP_BIN", "yt-dlp")
 DENO = os.environ.get("DENO_BIN", "/root/.deno/bin/deno")
 
-YOUTUBE_RE = re.compile(r"(?:youtu\.be/|youtube\.com/(?:watch\?v=|embed/|shorts/))([A-Za-z0-9_-]{11})")
+YOUTUBE_RE = re.compile(r"(?:youtu\.be/|youtube\.com/(?:watch\?v=|embed/|shorts/|live/))([A-Za-z0-9_-]{11})")
 ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
+CALLBACK_RE = re.compile(r"^[A-Za-z_$][A-Za-z0-9_$\.]*$")
 
 
 def video_id(value):
     value = unquote((value or "").strip())
     if ID_RE.fullmatch(value):
         return value
+    try:
+        parsed = urlparse(value)
+        host = (parsed.hostname or "").lower()
+        if host in ("youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com"):
+            qid = parse_qs(parsed.query).get("v", [""])[0]
+            if ID_RE.fullmatch(qid):
+                return qid
+            parts = [p for p in parsed.path.split("/") if p]
+            if len(parts) >= 2 and parts[0] in ("embed", "shorts", "live") and ID_RE.fullmatch(parts[1]):
+                return parts[1]
+        if host in ("youtu.be", "www.youtu.be"):
+            part = (parsed.path.strip("/").split("/") or [""])[0]
+            if ID_RE.fullmatch(part):
+                return part
+    except Exception:
+        pass
     match = YOUTUBE_RE.search(value)
     return match.group(1) if match else None
 
@@ -51,13 +68,9 @@ def extract_url(value):
 
     url = "https://www.youtube.com/watch?v=" + vid
     attempts = [
-        # Safari exposes HLS formats that currently avoid GVS PO-token requirements.
         ("youtube:player_client=web_safari", "best[protocol^=m3u8]/best"),
-        # Embedded client does not currently require a PO token, but only works for embeddable videos.
         ("youtube:player_client=web_embedded", "best[ext=mp4][height<=720]/best[height<=720]/best"),
-        # TV client is another no-PO-token fallback.
         ("youtube:player_client=tv", "best[ext=mp4][height<=720]/best[height<=720]/best"),
-        # Default extractor as final fallback.
         ("", "best[ext=mp4][height<=720]/best[ext=mp4]/best"),
     ]
     errors = []
@@ -82,6 +95,15 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def send_jsonp(self, status, payload, callback):
+        body = (callback + "(" + json.dumps(payload, ensure_ascii=False) + ");").encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/javascript; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_OPTIONS(self):
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -99,16 +121,38 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(404, {"error": "Not found"})
             return
 
-        value = parse_qs(parsed.query).get("url", [""])[0]
+        params = parse_qs(parsed.query)
+        value = params.get("url", [""])[0]
+        callback = params.get("callback", [""])[0]
+        if callback and not CALLBACK_RE.fullmatch(callback):
+            self.send_json(400, {"ok": False, "error": "Invalid callback"})
+            return
+
         try:
             vid, stream_url = extract_url(value)
-            self.send_json(200, {"ok": True, "videoId": vid, "url": stream_url})
+            payload = {"ok": True, "videoId": vid, "url": stream_url}
+            if callback:
+                self.send_jsonp(200, payload, callback)
+            else:
+                self.send_json(200, payload)
         except ValueError as exc:
-            self.send_json(400, {"ok": False, "error": str(exc)})
+            payload = {"ok": False, "error": str(exc)}
+            if callback:
+                self.send_jsonp(400, payload, callback)
+            else:
+                self.send_json(400, payload)
         except subprocess.TimeoutExpired:
-            self.send_json(504, {"ok": False, "error": "yt-dlp timed out"})
+            payload = {"ok": False, "error": "yt-dlp timed out"}
+            if callback:
+                self.send_jsonp(504, payload, callback)
+            else:
+                self.send_json(504, payload)
         except Exception as exc:
-            self.send_json(502, {"ok": False, "error": str(exc)})
+            payload = {"ok": False, "error": str(exc)}
+            if callback:
+                self.send_jsonp(502, payload, callback)
+            else:
+                self.send_json(502, payload)
 
     def log_message(self, fmt, *args):
         print("[youtube-backend] " + (fmt % args), flush=True)
