@@ -13,7 +13,14 @@ PORT = int(os.environ.get("YOUTUBE_BACKEND_PORT", "8765"))
 YTDLP = os.environ.get("YTDLP_BIN", "yt-dlp")
 DENO = os.environ.get("DENO_BIN", "/opt/gap/.deno/bin/deno")
 POT_URL = os.environ.get("YOUTUBE_POT_URL", "http://127.0.0.1:4416")
-COBALT_API = os.environ.get("YOUTUBE_COBALT_API", "https://api.cobalt.tools/api/json")
+COBALT_APIS = [
+    x.strip().rstrip("/")
+    for x in os.environ.get(
+        "YOUTUBE_COBALT_APIS",
+        "https://cobalt-api.meowing.de,https://api.cobalt.tools"
+    ).split(",")
+    if x.strip()
+]
 PIPED_WIKI = "https://raw.githubusercontent.com/TeamPiped/Piped.wiki/master/Instances.md"
 PIPED_STATIC = [
     "https://pipedapi.kavin.rocks", "https://pipedapi.tokhmi.xyz", "https://pipedapi.syncpundit.io",
@@ -76,20 +83,50 @@ def run_ytdlp(url, extractor_args, fmt):
     raise RuntimeError((result.stderr or result.stdout or "yt-dlp failed").strip()[-1200:])
 
 
-def run_cobalt(vid):
+def run_cobalt_one(api, vid):
     url = "https://www.youtube.com/watch?v=" + vid
-    payload = json.dumps({"url": url, "vCodec": "h264", "vQuality": "720", "isAudioOnly": False, "filenamePattern": "basic"}).encode("utf-8")
-    req = urllib.request.Request(COBALT_API, data=payload, headers={"Accept": "application/json", "Content-Type": "application/json", "User-Agent": "Mozilla/5.0"}, method="POST")
-    with urllib.request.urlopen(req, timeout=30) as response:
+    payload = json.dumps({
+        "url": url,
+        "videoQuality": "720",
+        "youtubeVideoCodec": "h264",
+        "youtubeVideoContainer": "mp4",
+        "downloadMode": "auto",
+        "alwaysProxy": True,
+        "filenameStyle": "basic"
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        api + "/",
+        data=payload,
+        headers={
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0"
+        },
+        method="POST"
+    )
+    with urllib.request.urlopen(req, timeout=35) as response:
         data = json.loads(response.read().decode("utf-8"))
     status = data.get("status")
-    if status in ("stream", "redirect", "success") and data.get("url"):
+    if status in ("tunnel", "redirect") and data.get("url"):
         return data["url"]
     if status == "picker":
         for item in data.get("picker", []):
             if item.get("type") == "video" and item.get("url"):
                 return item["url"]
-    raise RuntimeError("Cobalt: " + str(data.get("text") or status or "no stream")[:500])
+    if status == "error":
+        error = data.get("error") or {}
+        raise RuntimeError("Cobalt " + str(error.get("code") or "error"))
+    raise RuntimeError("Cobalt: " + str(data)[:500])
+
+
+def run_cobalt(vid):
+    errors = []
+    for api in COBALT_APIS:
+        try:
+            return run_cobalt_one(api, vid)
+        except Exception as exc:
+            errors.append(api + ": " + str(exc))
+    raise RuntimeError("Cobalt fallback failed: " + "; ".join(errors))
 
 
 def get_piped_instances():
@@ -168,7 +205,7 @@ def extract_url(value):
     try:
         return vid, run_cobalt(vid)
     except Exception as exc:
-        errors.append("Cobalt fallback: " + str(exc))
+        errors.append(str(exc))
     try:
         return vid, run_piped(vid)
     except Exception as exc:
