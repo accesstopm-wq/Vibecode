@@ -4,31 +4,26 @@ import os
 import re
 import subprocess
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlparse, unquote
 
 HOST = "0.0.0.0"
 PORT = int(os.environ.get("YOUTUBE_BACKEND_PORT", "8765"))
 YTDLP = os.environ.get("YTDLP_BIN", "yt-dlp")
 DENO = os.environ.get("DENO_BIN", "/root/.deno/bin/deno")
 
-YOUTUBE_RE = re.compile(r"(?:youtu\\.be/|youtube\\.com/(?:watch\\?v=|embed/|shorts/))([A-Za-z0-9_-]{11})")
+YOUTUBE_RE = re.compile(r"(?:youtu\.be/|youtube\.com/(?:watch\?v=|embed/|shorts/))([A-Za-z0-9_-]{11})")
 ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
 
 
 def video_id(value):
-    value = (value or "").strip()
+    value = unquote((value or "").strip())
     if ID_RE.fullmatch(value):
         return value
     match = YOUTUBE_RE.search(value)
     return match.group(1) if match else None
 
 
-def extract_url(value):
-    vid = video_id(value)
-    if not vid:
-        raise ValueError("Invalid YouTube URL")
-
-    url = "https://www.youtube.com/watch?v=" + vid
+def run_ytdlp(url, extractor_args, fmt):
     cmd = [
         YTDLP,
         "--no-playlist",
@@ -37,18 +32,41 @@ def extract_url(value):
         "--get-url",
         "--js-runtimes", "deno:" + DENO,
         "--remote-components", "ejs:github",
-        "-f", "best[ext=mp4][height<=720]/best[ext=mp4]/best",
-        url,
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=45)
-    if result.returncode != 0:
-        message = (result.stderr or result.stdout or "yt-dlp failed").strip()
-        raise RuntimeError(message[-1000:])
-
+    if extractor_args:
+        cmd += ["--extractor-args", extractor_args]
+    cmd += ["-f", fmt, url]
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
     lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
-    if not lines:
-        raise RuntimeError("yt-dlp returned no stream URL")
-    return vid, lines[-1]
+    if result.returncode == 0 and lines:
+        return lines[-1]
+    message = (result.stderr or result.stdout or "yt-dlp failed").strip()
+    raise RuntimeError(message[-1200:])
+
+
+def extract_url(value):
+    vid = video_id(value)
+    if not vid:
+        raise ValueError("Invalid YouTube URL or video ID")
+
+    url = "https://www.youtube.com/watch?v=" + vid
+    attempts = [
+        # Safari exposes HLS formats that currently avoid GVS PO-token requirements.
+        ("youtube:player_client=web_safari", "best[protocol^=m3u8]/best"),
+        # Embedded client does not currently require a PO token, but only works for embeddable videos.
+        ("youtube:player_client=web_embedded", "best[ext=mp4][height<=720]/best[height<=720]/best"),
+        # TV client is another no-PO-token fallback.
+        ("youtube:player_client=tv", "best[ext=mp4][height<=720]/best[height<=720]/best"),
+        # Default extractor as final fallback.
+        ("", "best[ext=mp4][height<=720]/best[ext=mp4]/best"),
+    ]
+    errors = []
+    for extractor_args, fmt in attempts:
+        try:
+            return vid, run_ytdlp(url, extractor_args, fmt)
+        except Exception as exc:
+            errors.append(str(exc))
+    raise RuntimeError("; ".join(errors)[-1800:])
 
 
 class Handler(BaseHTTPRequestHandler):
