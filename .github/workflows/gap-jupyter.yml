@@ -53,37 +53,47 @@ jobs:
             -e YOUTUBE_BACKEND_PORT=8765 \
             -v "$GITHUB_WORKSPACE/gap-jupyter:/workspace" \
             ghcr.io/gap-system/jupyter-gap:4.15.0-full \
-            sh -lc 'set -e; ln -sf /workspace/save-to-github.py /opt/gap/.local/bin/save-to-github; python3 -m pip install --user --no-cache-dir "jupyterlab==3.6.8" "notebook==6.5.7" "python-telegram-bot" "requests" "yt-dlp" "bgutil-ytdlp-pot-provider"; curl -fsSL https://deno.land/install.sh | sh; export PATH="/opt/gap/.deno/bin:$PATH"; rm -rf /workspace/bgutil-ytdlp-pot-provider; git clone --depth 1 --branch 2.0.0 https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git /workspace/bgutil-ytdlp-pot-provider; cd /workspace/bgutil-ytdlp-pot-provider/server; /opt/gap/.deno/bin/deno install --allow-scripts=npm:canvas --frozen; nohup /opt/gap/.deno/bin/deno run --allow-env --allow-net --allow-ffi=. --allow-read=. src/main.ts --host 127.0.0.1 --port 4416 > /workspace/bgutil.log 2>&1 & echo $! > /tmp/bgutil.pid; cd /workspace; nohup python3 /workspace/youtube_backend.py > /workspace/youtube-backend.log 2>&1 & echo $! > /tmp/youtube-backend.pid; python3 /workspace/bot.py > /workspace/bot.log 2>&1 & echo $! > /tmp/bot.pid; exec jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --ServerApp.token="$JUPYTER_TOKEN" --ServerApp.root_dir=/workspace --ServerApp.allow_remote_access=True --ServerApp.trust_xheaders=True --ServerApp.allow_origin="*"'
+            sh -lc 'set -e; ln -sf /workspace/save-to-github.py /opt/gap/.local/bin/save-to-github; python3 -m pip install --user --no-cache-dir "jupyterlab==3.6.8" "notebook==6.5.7" "python-telegram-bot" "requests" "yt-dlp" "bgutil-ytdlp-pot-provider"; curl -fsSL https://deno.land/install.sh | sh; export PATH="/opt/gap/.deno/bin:$PATH"; test -x /opt/gap/.deno/bin/deno; rm -rf /workspace/bgutil-ytdlp-pot-provider; git clone --depth 1 --branch 2.0.0 https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git /workspace/bgutil-ytdlp-pot-provider; cd /workspace/bgutil-ytdlp-pot-provider/server; /opt/gap/.deno/bin/deno install --allow-scripts=npm:canvas --frozen; nohup /opt/gap/.deno/bin/deno run --allow-env --allow-net --allow-ffi=. --allow-read=. src/main.ts --host 127.0.0.1 --port 4416 > /workspace/bgutil.log 2>&1 & echo $! > /tmp/bgutil.pid; cd /workspace; nohup python3 /workspace/youtube_backend.py > /workspace/youtube-backend.log 2>&1 & echo $! > /tmp/youtube-backend.pid; python3 /workspace/bot.py > /workspace/bot.log 2>&1 & echo $! > /tmp/bot.pid; exec jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --ServerApp.token="$JUPYTER_TOKEN" --ServerApp.root_dir=/workspace --ServerApp.allow_remote_access=True --ServerApp.trust_xheaders=True --ServerApp.allow_origin="*"'
 
-          echo "Waiting for JupyterLab and GAP kernel..."
-          for i in {1..90}; do
+          echo "Waiting for JupyterLab (max 30 sec)..."
+          for i in {1..15}; do
             if curl -fsS http://127.0.0.1:8888/lab >/dev/null 2>&1; then echo "JupyterLab is ready."; break; fi
-            if [ "$i" -eq 90 ]; then echo "JupyterLab failed to start."; docker logs gap-jupyter || true; exit 1; fi
+            if [ "$i" -eq 15 ]; then docker logs gap-jupyter || true; exit 1; fi
             sleep 2
           done
 
-          echo "Waiting for PO token provider..."
-          for i in {1..90}; do
-            if curl -fsS http://127.0.0.1:4416/ >/dev/null 2>&1 || curl -fsS http://127.0.0.1:4416/health >/dev/null 2>&1; then echo "PO token provider is ready."; break; fi
-            if [ "$i" -eq 90 ]; then echo "PO token provider failed to start."; docker exec gap-jupyter sh -lc 'cat /workspace/bgutil.log 2>/dev/null || true'; exit 1; fi
+          echo "Waiting for PO token provider (max 30 sec)..."
+          for i in {1..15}; do
+            if docker exec gap-jupyter sh -lc 'python3 -c "import socket; s=socket.create_connection((\"127.0.0.1\",4416),2); s.close()"' >/dev/null 2>&1; then
+              echo "PO token provider is ready."
+              break
+            fi
+            if ! docker exec gap-jupyter sh -lc 'kill -0 $(cat /tmp/bgutil.pid) 2>/dev/null'; then
+              echo "PO token provider process died."
+              docker exec gap-jupyter sh -lc 'cat /workspace/bgutil.log 2>/dev/null || true'
+              exit 1
+            fi
+            if [ "$i" -eq 15 ]; then
+              echo "PO token provider did not open port 4416 within 30 sec."
+              docker exec gap-jupyter sh -lc 'cat /workspace/bgutil.log 2>/dev/null || true'
+              exit 1
+            fi
             sleep 2
           done
 
-          echo "Waiting for YouTube backend..."
-          for i in {1..60}; do
+          echo "Waiting for YouTube backend (max 30 sec)..."
+          for i in {1..15}; do
             if curl -fsS http://127.0.0.1:8765/health >/dev/null 2>&1; then echo "YouTube backend is ready."; break; fi
-            if [ "$i" -eq 60 ]; then echo "YouTube backend failed to start."; docker logs gap-jupyter || true; exit 1; fi
+            if [ "$i" -eq 15 ]; then docker exec gap-jupyter sh -lc 'cat /workspace/youtube-backend.log 2>/dev/null || true'; exit 1; fi
             sleep 2
           done
 
           echo "Jupyter versions:"
           docker exec gap-jupyter python3 -c 'import jupyterlab, notebook; print("JupyterLab", jupyterlab.__version__); print("Notebook", notebook.__version__)'
-          echo "Container status:"
-          docker ps --filter name=gap-jupyter
           echo "Jupyter kernels:"
           docker exec gap-jupyter jupyter kernelspec list || true
           echo "GAP executable:"
-          docker exec gap-jupyter sh -lc 'command -v gap; command -v jupyter-kernel-gap; echo JUPYTER_GAP_EXECUTABLE=$JUPYTER_GAP_EXECUTABLE; command -v save-to-github'
+          docker exec gap-jupyter sh -lc 'command -v gap; command -v jupyter-kernel-gap; command -v save-to-github'
           echo "GAP package check:"
           docker exec gap-jupyter gap -q -c 'Print(LoadPackage("JupyterKernel"),"\n"); QUIT;'
           echo "PO token provider log:"
@@ -135,7 +145,7 @@ jobs:
           nohup ./cloudflared tunnel --url http://127.0.0.1:8888 > tunnel.log 2>&1 &
           JUPYTER_TUNNEL_PID=$!
           JUPYTER_URL=""
-          for i in {1..60}; do
+          for i in {1..30}; do
             JUPYTER_URL=$(grep -oE 'https://[-a-zA-Z0-9]+\.trycloudflare\.com' tunnel.log | head -1 || true)
             [ -n "$JUPYTER_URL" ] && break
             sleep 2
@@ -145,7 +155,7 @@ jobs:
           nohup ./cloudflared tunnel --url http://127.0.0.1:8765 > youtube-tunnel.log 2>&1 &
           YOUTUBE_TUNNEL_PID=$!
           YOUTUBE_URL=""
-          for i in {1..60}; do
+          for i in {1..30}; do
             YOUTUBE_URL=$(grep -oE 'https://[-a-zA-Z0-9]+\.trycloudflare\.com' youtube-tunnel.log | head -1 || true)
             [ -n "$YOUTUBE_URL" ] && break
             sleep 2
@@ -153,10 +163,10 @@ jobs:
           test -n "$YOUTUBE_URL"
 
           echo "YouTube backend: $YOUTUBE_URL"
-          for i in {1..30}; do
-            PUBLIC_HEALTH=$(curl -fsS --max-time 10 "$YOUTUBE_URL/health" 2>/dev/null || true)
+          for i in {1..15}; do
+            PUBLIC_HEALTH=$(curl -fsS --max-time 5 "$YOUTUBE_URL/health" 2>/dev/null || true)
             if echo "$PUBLIC_HEALTH" | grep -q 'youtube-backend'; then echo "Public YouTube backend is reachable: $PUBLIC_HEALTH"; break; fi
-            [ "$i" -eq 30 ] && { cat youtube-tunnel.log || true; exit 1; }
+            if [ "$i" -eq 15 ]; then cat youtube-tunnel.log || true; exit 1; fi
             sleep 2
           done
 
