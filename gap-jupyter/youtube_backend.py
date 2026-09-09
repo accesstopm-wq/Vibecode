@@ -9,7 +9,7 @@ from urllib.parse import parse_qs, urlparse, unquote
 HOST = "0.0.0.0"
 PORT = int(os.environ.get("YOUTUBE_BACKEND_PORT", "8765"))
 YTDLP = os.environ.get("YTDLP_BIN", "yt-dlp")
-DENO = os.environ.get("DENO_BIN", "/root/.deno/bin/deno")
+DENO = os.environ.get("DENO_BIN", "/opt/gap/.deno/bin/deno")
 
 YOUTUBE_RE = re.compile(r"(?:youtu\.be/|youtube\.com/(?:watch\?v=|embed/|shorts/|live/))([A-Za-z0-9_-]{11})")
 ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
@@ -96,9 +96,6 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def send_jsonp(self, payload, callback):
-        # JSONP is loaded through a <script> tag on old VIDAA browsers.
-        # Always return HTTP 200 so backend errors reach the JS callback
-        # instead of becoming the browser's generic script onerror/network error.
         body = (callback + "(" + json.dumps(payload, ensure_ascii=False) + ");").encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/javascript; charset=utf-8")
