@@ -22,8 +22,7 @@ html,body{margin:0;width:100%;height:100%;background:#000;color:#fff;font-family
 (function(){
 'use strict';
 var video=document.getElementById('video'),overlay=document.getElementById('overlay'),seekbar=document.getElementById('seekbar'),seekfill=document.getElementById('seekfill'),play=document.getElementById('play'),back10=document.getElementById('back10'),forward10=document.getElementById('forward10'),timeEl=document.getElementById('time'),errorEl=document.getElementById('error'),statusEl=document.getElementById('status');
-var controls=[back10,play,forward10,seekbar],focusIndex=1,overlayTimer=0,videoId='',storageKey='vidaa-yt-progress:',lastSaved=0,loadingIndex=0;
-var instances=['https://inv.nadeko.net','https://invidious.nerdvpn.de','https://yt.chocolatemoo53.com','https://invidious.tiekoetter.com','https://invidious.f5.si'];
+var controls=[back10,play,forward10,seekbar],focusIndex=1,overlayTimer=0,videoId='',storageKey='vidaa-yt-progress:',lastSaved=0,apiBase='';
 function param(name){var q=location.search.substring(1).split('&'),i,p,k;for(i=0;i<q.length;i++){p=q[i].split('=');k=decodeURIComponent(p[0]||'');if(k===name)return decodeURIComponent((p.slice(1).join('=')||'').replace(/\+/g,' '));}return '';}
 function parseYoutube(v){var m;if(!v)return '';v=v.trim();m=v.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([A-Za-z0-9_-]{11})/);if(m)return m[1];if(/^[A-Za-z0-9_-]{11}$/.test(v))return v;return '';}
 function fmt(s){var h,m,x;if(!isFinite(s))s=0;s=Math.max(0,Math.floor(s));h=Math.floor(s/3600);m=Math.floor((s%3600)/60);x=s%60;return(h?h+':':'')+(h?(m<10?'0':''):'')+m+':'+(x<10?'0':'')+x;}
@@ -33,11 +32,10 @@ function seek(d){if(isFinite(video.duration))video.currentTime=Math.max(0,Math.m
 function toggle(){if(video.paused){var p=video.play();if(p&&p.catch)p.catch(function(){});}else video.pause();showOverlay();}
 function save(){var now=Date.now();if(videoId&&isFinite(video.currentTime)&&video.currentTime>0&&now-lastSaved>1000){localStorage.setItem(storageKey+videoId,String(video.currentTime));lastSaved=now;}}
 function update(){var p=video.duration?(video.currentTime/video.duration*100):0;seekfill.style.width=p+'%';timeEl.innerHTML=fmt(video.currentTime)+' / '+fmt(video.duration);if(video.currentTime-lastSaved>5)save();}
-function fail(){statusEl.className='status hide';errorEl.innerHTML='Не вдалося отримати відео. Спробувано кілька актуальних Invidious-інстансів. Спробуй інше відео або повтори пізніше.';errorEl.className='error';}
-function request(url,ok,bad){var x=new XMLHttpRequest();x.open('GET',url,true);x.onreadystatechange=function(){if(x.readyState!==4)return;if(x.status>=200&&x.status<300){try{ok(JSON.parse(x.responseText));}catch(e){bad(e);}}else bad(new Error('HTTP '+x.status));};x.onerror=function(){bad(new Error('Network error'));};x.send();}
-function chooseStream(data){var a=data.formatStreams||[],i,s,best=null,score,bestScore=999999;for(i=0;i<a.length;i++){s=a[i];if(s.url&&/^video\/mp4/i.test(s.type||'')&&!s.type.match(/audio-only/i)){score=Math.abs((parseInt(s.qualityLabel,10)||0)-720);if(score<bestScore){best=s;bestScore=score;}}}if(best)return best;for(i=0;i<a.length;i++){s=a[i];if(s.url&&/^video\/mp4/i.test(s.type||''))return s;}return null;}
-function clearVideoHandlers(){video.onloadedmetadata=null;video.onerror=null;}
-function loadInstance(idx){var base;if(idx>=instances.length){fail();return;}loadingIndex=idx;base=instances[idx];statusEl.innerHTML='Loading '+(idx+1)+'/'+instances.length+'…';statusEl.className='status';request(base+'/api/v1/videos/'+videoId+'?local=true',function(data){var stream=chooseStream(data);if(!stream){loadInstance(idx+1);return;}clearVideoHandlers();video.onloadedmetadata=function(){var saved=parseFloat(localStorage.getItem(storageKey+videoId));statusEl.className='status hide';if(saved>5&&saved<video.duration-5)video.currentTime=saved;showOverlay();var p=video.play();if(p&&p.catch)p.catch(function(){});};video.onerror=function(){clearVideoHandlers();loadInstance(idx+1);};video.src=stream.url;video.load();},function(){loadInstance(idx+1);});}
+function fail(message){statusEl.className='status hide';errorEl.innerHTML=message||'Не вдалося отримати відеопотік. Спробуй повторити пізніше.';errorEl.className='error';}
+function requestJson(url,ok,bad){var x=new XMLHttpRequest();x.open('GET',url,true);x.onreadystatechange=function(){if(x.readyState!==4)return;if(x.status>=200&&x.status<300){try{ok(JSON.parse(x.responseText));}catch(e){bad(e);}}else{bad(new Error('HTTP '+x.status));}};x.onerror=function(){bad(new Error('Network error'));};x.send();}
+function loadStream(){var endpoint=apiBase.replace(/\/$/,'')+'/api/stream?url='+encodeURIComponent('https://www.youtube.com/watch?v='+videoId);statusEl.innerHTML='Loading video…';statusEl.className='status';requestJson(endpoint,function(data){if(!data||!data.url){fail((data&&data.error)||'Backend не повернув відеопотік.');return;}video.onloadedmetadata=function(){var saved=parseFloat(localStorage.getItem(storageKey+videoId));statusEl.className='status hide';if(saved>5&&saved<video.duration-5)video.currentTime=saved;showOverlay();var p=video.play();if(p&&p.catch)p.catch(function(){});};video.onerror=function(){fail('VIDAA не зміг відкрити отриманий відеопотік. Спробуй інше відео.');};video.src=data.url;video.load();},function(){fail('Не вдалося підключитися до YouTube backend. Запусти GAP/Jupyter workflow і повтори.');});}
+function loadConfig(){requestJson('backend-url.json?ts='+Date.now(),function(cfg){apiBase=(cfg&&cfg.apiBase)||'';if(!apiBase){fail('YouTube backend зараз не запущений. Запусти GAP/Jupyter workflow і повтори.');return;}loadStream();},function(){fail('Не вдалося завантажити конфігурацію YouTube backend.');});}
 function key(e){var k=e.keyCode||e.which;if([37,38,39,40,13,32,27,48,50,52,53,54,56].indexOf(k)>=0)e.preventDefault();
 if(k===27){save();return;}
 if(k===52||k===37){if(focusIndex===3)seek(-10);else if(focusIndex===1)setFocus(0);else setFocus(focusIndex-1);return;}
@@ -49,8 +47,8 @@ if(k===48){if(document.fullscreenElement){if(document.exitFullscreen)document.ex
 video.addEventListener('timeupdate',update,false);video.addEventListener('play',showOverlay,false);video.addEventListener('pause',showOverlay,false);video.addEventListener('click',toggle,false);video.addEventListener('ended',function(){if(videoId)localStorage.removeItem(storageKey+videoId);},false);document.addEventListener('keydown',key,false);document.addEventListener('visibilitychange',save,false);window.addEventListener('pagehide',save,false);window.addEventListener('beforeunload',save,false);
 play.onclick=toggle;back10.onclick=function(){seek(-10);};forward10.onclick=function(){seek(10);};seekbar.onclick=function(e){var r=seekbar.getBoundingClientRect(),x=(e.clientX-r.left)/r.width;if(isFinite(video.duration))video.currentTime=Math.max(0,Math.min(1,x))*video.duration;setFocus(3);};
 videoId=parseYoutube(param('url'));
-if(!videoId){fail();errorEl.innerHTML='Відкрий сторінку з параметром ?url=YouTube_URL';return;}
-loadInstance(0);
+if(!videoId){fail('Відкрий сторінку з параметром ?url=YouTube_URL');return;}
+loadConfig();
 })();
 </script>
 </body>
