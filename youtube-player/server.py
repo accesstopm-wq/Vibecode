@@ -33,20 +33,25 @@ def extract_streams(source):
     v=get('bestvideo[ext=mp4][vcodec^=avc1][height<=720]') or get('bestvideo[height<=720]')
     a=get('bestaudio[ext=m4a][acodec^=mp4a]') or get('bestaudio')
     if not v or not a: raise RuntimeError('yt-dlp could not extract video/audio URL')
-    return v,a
+    try:
+        p=run(['yt-dlp','--no-playlist','--no-warnings','--quiet','--print','%(duration)s',source],60)
+        duration=float(p.stdout.strip().splitlines()[0]) if p.returncode==0 and p.stdout.strip() else 0
+    except Exception: duration=0
+    return v,a,duration
 
 def state_for(v):
-    return STATES.setdefault(v,{'video_url':None,'audio_url':None,'url_time':0,'active':None,'building':None,'generation':0,'desired_start':0.0,'worker':None,'source_url':None,'condition':threading.Condition(LOCK)})
+    return STATES.setdefault(v,{'video_url':None,'audio_url':None,'duration':0,'url_time':0,'active':None,'building':None,'generation':0,'desired_start':0.0,'worker':None,'source_url':None,'condition':threading.Condition(LOCK)})
 
 def cached_streams(v,source):
     with LOCK:
         s=state_for(v)
-        if s['video_url'] and s['audio_url'] and now()-s['url_time']<URL_TTL:return s['video_url'],s['audio_url']
+        if s['video_url'] and s['audio_url'] and now()-s['url_time']<URL_TTL:return s['video_url'],s['audio_url'],s.get('duration',0)
     print('[backend] extracting YouTube URLs:',v,flush=True)
-    vu,au=extract_streams(source)
+    vu,au,duration=extract_streams(source)
     with LOCK:
-        s=state_for(v);s['video_url']=vu;s['audio_url']=au;s['url_time']=now();s['source_url']=source
-    return vu,au
+        s=state_for(v);s['video_url']=vu;s['audio_url']=au;s['duration']=duration;s['url_time']=now();s['source_url']=source
+    print('[backend] duration=',duration,flush=True)
+    return vu,au,duration
 
 def ready(sess):
     p=os.path.join(sess['dir'],'index.m3u8')
@@ -61,7 +66,7 @@ def ffmpeg(v,t,vu,au,start):
     cmd=['ffmpeg','-hide_banner','-loglevel','warning',
          '-reconnect','1','-reconnect_streamed','1','-reconnect_on_network_error','1','-reconnect_on_http_error','4xx,5xx','-reconnect_delay_max','5','-ss',str(start),'-i',vu,
          '-reconnect','1','-reconnect_streamed','1','-reconnect_on_network_error','1','-reconnect_on_http_error','4xx,5xx','-reconnect_delay_max','5','-ss',str(start),'-i',au,
-         '-map','0:v:0','-map','1:a:0','-c:v','copy','-c:a','aac','-ar','48000','-ac','2','-b:a','128k','-fflags','+genpts','-avoid_negative_ts','make_zero','-af','aresample=async=1:first_pts=0','-muxdelay','0','-muxpreload','0','-f','hls','-hls_time',str(HLS_TIME),'-hls_list_size',str(HLS_LIST_SIZE),'-hls_flags','independent_segments+temp_file','-hls_segment_type','mpegts',out]
+         '-map','0:v:0','-map','1:a:0','-c:v','copy','-c:a','aac','-ar','48000','-ac','2','-b:a','128k','-fflags','+genpts','-avoid_negative_ts','make_zero','-af','aresample=async=1:first_pts=0','-muxdelay','0','-muxpreload','0','-f','hls','-hls_time',str(HLS_TIME),'-hls_list_size',str(HLS_LIST_SIZE),'-hls_flags','independent_segments+temp_file+delete_segments','-hls_delete_threshold','2','-hls_segment_type','mpegts',out]
     log=open(os.path.join(d,'ffmpeg.log'),'w');p=subprocess.Popen(cmd,stdout=subprocess.DEVNULL,stderr=log);return p,log
 
 def cleanup(sess):
@@ -92,7 +97,9 @@ def worker(v,source):
                     s=STATES.get(v)
                     if not s:return
                     newer=s['generation']!=b['generation']
-                if ready(b) or newer:break
+                if newer:
+                    cleanup(b);break
+                if ready(b):break
                 p=b.get('process')
                 if p and p.poll() is not None:break
                 time.sleep(.2)
@@ -107,16 +114,14 @@ def worker(v,source):
                             print('[backend] CLEANUP OLD',v,'start=',old['start'],flush=True)
                             cleanup(old)
                     else:
-                        s['building']=None
-                        s['condition'].notify_all()
-                        cleanup(b)
+                        s['building']=None;s['condition'].notify_all();cleanup(b)
             else:
                 with LOCK:
                     s=STATES.get(v)
                     if s and s.get('building') is b:s['building']=None;s['condition'].notify_all()
                 cleanup(b)
             continue
-        try:vu,au=cached_streams(v,source)
+        try:vu,au,duration=cached_streams(v,source)
         except Exception as e:
             print('[backend] extraction failed:',repr(e),flush=True)
             with LOCK:
@@ -129,7 +134,7 @@ def worker(v,source):
             gen=s['generation'];target=s['desired_start'];active=s.get('active')
             if active and abs(active['start']-target)<1:return
             if s.get('building'):continue
-            t=token(gen);b={'video_id':v,'token':t,'generation':gen,'start':target,'dir':sess_dir(v,t),'process':None,'log':None,'active':False};SESSIONS[t]=b;s['building']=b
+            t=token(gen);b={'video_id':v,'token':t,'generation':gen,'start':target,'duration':duration,'dir':sess_dir(v,t),'process':None,'log':None,'active':False};SESSIONS[t]=b;s['building']=b
         print('[backend] BUILD',v,'start=',target,'generation=',gen,flush=True)
         try:
             p,log=ffmpeg(v,t,vu,au,target)
@@ -199,8 +204,9 @@ class Handler(BaseHTTPRequestHandler):
             wait_new=active is not None and abs(active.get('start',0)-start)>1
             sess=request(v,source,start,wait_new)
             if not sess:return self.json({'error':'stream build failed'},502)
+            duration=state_for(v).get('duration',0)
             url=BASE_URL.rstrip('/')+'/hls/'+v+'/'+sess['token']+'/index.m3u8'
-            return self.json({'ok':True,'videoId':v,'url':url,'start':sess['start'],'generation':sess['generation']})
+            return self.json({'ok':True,'videoId':v,'url':url,'start':sess['start'],'duration':duration,'generation':sess['generation']})
         if p.startswith('/hls/'):
             parts=p.strip('/').split('/')
             if len(parts)<4:return self.send_error(404)
