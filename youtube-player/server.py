@@ -10,7 +10,6 @@ ROOT=os.path.expanduser('~/vidaa_streams')
 URL_TTL=45*60
 HLS_TIME=4
 HLS_LIST_SIZE=30
-OLD_GRACE=120
 READY_TIMEOUT=90
 os.makedirs(ROOT, exist_ok=True)
 LOCK=threading.RLock(); STATES={}; SESSIONS={}; COUNTER=0
@@ -80,12 +79,6 @@ def cleanup(sess):
     shutil.rmtree(sess['dir'],ignore_errors=True)
     with LOCK:SESSIONS.pop(sess['token'],None)
 
-def delayed_cleanup(sess):
-    time.sleep(OLD_GRACE)
-    with LOCK:
-        if sess.get('active'):return
-    cleanup(sess)
-
 def worker(v,source):
     while True:
         with LOCK:
@@ -110,14 +103,18 @@ def worker(v,source):
                     if s['generation']==b['generation']:
                         old=s.get('active');s['active']=b;s['building']=None;b['active']=True
                         print('[backend] SWITCH',v,'start=',b['start'],flush=True);s['condition'].notify_all()
-                        if old and old is not b:threading.Thread(target=delayed_cleanup,args=(old,),daemon=True).start()
+                        if old and old is not b:
+                            print('[backend] CLEANUP OLD',v,'start=',old['start'],flush=True)
+                            cleanup(old)
                     else:
-                        s['building']=None;threading.Thread(target=cleanup,args=(b,),daemon=True).start()
+                        s['building']=None
+                        s['condition'].notify_all()
+                        cleanup(b)
             else:
                 with LOCK:
                     s=STATES.get(v)
                     if s and s.get('building') is b:s['building']=None;s['condition'].notify_all()
-                threading.Thread(target=cleanup,args=(b,),daemon=True).start()
+                cleanup(b)
             continue
         try:vu,au=cached_streams(v,source)
         except Exception as e:
@@ -153,10 +150,12 @@ def worker(v,source):
                 if not s:cleanup(b);return
                 if s['generation']==gen:
                     old=s.get('active');s['active']=b;s['building']=None;b['active']=True;print('[backend] READY/SWITCH',v,'start=',target,flush=True);s['condition'].notify_all()
-                    if old and old is not b:threading.Thread(target=delayed_cleanup,args=(old,),daemon=True).start()
+                    if old and old is not b:
+                        print('[backend] CLEANUP OLD',v,'start=',old['start'],flush=True)
+                        cleanup(old)
                     if s['generation']==gen:return
                 else:
-                    s['building']=None;s['condition'].notify_all();threading.Thread(target=cleanup,args=(b,),daemon=True).start()
+                    s['building']=None;s['condition'].notify_all();cleanup(b)
         except Exception as e:
             print('[backend] worker exception:',repr(e),flush=True)
             with LOCK:
