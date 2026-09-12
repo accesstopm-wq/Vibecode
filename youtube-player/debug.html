@@ -2,151 +2,56 @@
 <html>
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>YT HLS DEBUG 2</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>YT HLS FULL TEST</title>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1.7.2/dist/hls.light.min.js"></script>
 <style>
-body{margin:0;background:#111;color:#eee;font:14px monospace;padding:10px}
-video{width:100%;max-height:40vh;background:#000}
-button{font:16px monospace;padding:12px;margin:4px;min-width:150px}
-#state{padding:8px;background:#222;margin:8px 0;white-space:pre-wrap;word-break:break-all}
-#log{white-space:pre-wrap;word-break:break-all;background:#181818;padding:8px;height:42vh;overflow:auto}
-.ok{color:#8f8}.bad{color:#f88}.warn{color:#fc8}
+body{margin:0;background:#111;color:#eee;font:14px monospace;padding:10px}video{width:100%;max-height:38vh;background:#000}button{font:15px monospace;padding:12px;margin:4px;min-width:150px}#state{padding:8px;background:#222;margin:8px 0;white-space:pre-wrap;word-break:break-all}.ok{color:#8f8}.bad{color:#f88}.warn{color:#fc8}#log{white-space:pre-wrap;word-break:break-all;background:#181818;padding:8px;height:46vh;overflow:auto}
 </style>
 </head>
 <body>
-<h3>YT HLS DEBUG 2</h3>
+<h3>YT HLS FULL TEST</h3>
 <video id="video" controls playsinline></video>
 <div>
-<button id="b0">START 0</button>
-<button id="b900">START 900</button>
-<button id="brapid">RAPID 100/500/900</button>
-<button id="bclear">CLEAR</button>
+<button id="full">FULL REGRESSION</button>
+<button id="start0">START 0</button>
+<button id="start900">START 900</button>
+<button id="rapid">RAPID 100/500/900</button>
+<button id="clear">CLEAR</button>
 </div>
-<div id="state">PAGE SCRIPT STARTED...</div>
+<div id="state">Ready. Press FULL REGRESSION once.</div>
 <div id="log"></div>
 <script>
 (function(){
-var video=document.getElementById('video');
-var state=document.getElementById('state');
-var logEl=document.getElementById('log');
-var HLS=null,API='',SOURCE='https://youtu.be/RZZzMCcwfnY?si=6QEf6511HZDURoiH',totalDuration=0,streamStart=0,serial=0;
-
-function log(s,cls){
- var t=new Date().toISOString().substr(11,12)+' '+s;
- var d=document.createElement('div');
- if(cls)d.className=cls;
- d.textContent=t;
- logEl.appendChild(d);logEl.scrollTop=logEl.scrollHeight;
-}
+'use strict';
+var video=document.getElementById('video'),state=document.getElementById('state'),logEl=document.getElementById('log');
+var HLS=null,API='',SOURCE='https://youtu.be/RZZzMCcwfnY?si=6QEf6511HZDURoiH',serial=0,totalDuration=0,streamStart=0,testRunning=false,fatalErrors=0,audioAppends=0,videoAppends=0;
+function log(s,cls){var d=document.createElement('div');d.className=cls||'';d.textContent=new Date().toISOString().substr(11,12)+' '+s;logEl.appendChild(d);logEl.scrollTop=logEl.scrollHeight;}
 function clearLog(){logEl.innerHTML='';}
 function fmt(n){return isFinite(n)?Number(n).toFixed(3):'?';}
 function ranges(r){var a=[],i;try{for(i=0;i<r.length;i++)a.push(fmt(r.start(i))+'-'+fmt(r.end(i)));}catch(e){}return a.join(',')||'-';}
-function stateNow(){
- state.textContent='paused='+video.paused+' readyState='+video.readyState+' networkState='+video.networkState+
- '\ncurrent='+fmt(video.currentTime)+' streamStart='+fmt(streamStart)+' GLOBAL='+fmt(streamStart+video.currentTime)+
- '\nduration='+fmt(video.duration)+' totalDuration='+fmt(totalDuration)+
- '\nbuffered=['+ranges(video.buffered)+'] seekable=['+ranges(video.seekable)+']'+
- '\nHls.js='+(window.Hls?'YES version='+Hls.version:'NO');
-}
-function mediaState(prefix){log(prefix+' paused='+video.paused+' readyState='+video.readyState+' networkState='+video.networkState+' current='+fmt(video.currentTime)+' duration='+fmt(video.duration)+' buffered='+ranges(video.buffered)+' seekable='+ranges(video.seekable));}
-
-window.onerror=function(msg,src,line,col,err){
- log('JAVASCRIPT ERROR: '+msg+' @ '+line+':'+col,'bad');
- state.textContent='JAVASCRIPT ERROR: '+msg+' @ '+line+':'+col;
- return false;
-};
-window.onunhandledrejection=function(e){log('UNHANDLED PROMISE: '+e.reason,'bad');};
-
-if(!video){log('VIDEO ELEMENT NOT FOUND','bad');return;}
-log('SCRIPT INITIALIZED','ok');
-log('Hls global='+(window.Hls?'YES version='+Hls.version:'NO'),'warn');
-log('SOURCE='+SOURCE);
-
-['loadstart','durationchange','loadedmetadata','loadeddata','progress','canplay','canplaythrough','play','playing','pause','waiting','stalled','suspend','seeking','seeked','timeupdate','ended','emptied','abort'].forEach(function(ev){
- video.addEventListener(ev,function(){stateNow();if(ev!=='timeupdate'&&ev!=='progress')mediaState('VIDEO '+ev);},false);
-});
-video.addEventListener('error',function(){var e=video.error;log('VIDEO ERROR code='+(e?e.code:'?')+' message='+(e?e.message:'?'),'bad');mediaState('AFTER VIDEO ERROR');},false);
-
-function destroy(){
- if(HLS){try{HLS.destroy();}catch(e){log('HLS destroy error '+e,'bad');}HLS=null;}
- try{video.pause();}catch(e){}
- try{video.removeAttribute('src');video.load();}catch(e){}
- stateNow();
-}
-
-function getAPI(done){
- log('GET backend-url.json...');
- var x=new XMLHttpRequest();
- x.open('GET','backend-url.json?debug='+new Date().getTime(),true);
- x.timeout=10000;
- x.onreadystatechange=function(){
-  if(x.readyState!==4)return;
-  log('CONFIG HTTP '+x.status);
-  if(x.status<200||x.status>=300){log('CONFIG HTTP ERROR body='+x.responseText,'bad');return;}
-  try{
-   var obj=JSON.parse(x.responseText);
-   API=(obj.apiBase||obj.url||'').replace(/\/$/,'');
-   log('API='+API,'ok');
-   if(!API){log('CONFIG HAS NO apiBase/url','bad');return;}
-   done();
-  }catch(e){log('CONFIG JSON ERROR '+e+' body='+x.responseText,'bad');}
- };
- x.onerror=function(){log('CONFIG NETWORK ERROR','bad');};
- x.ontimeout=function(){log('CONFIG TIMEOUT 10s','bad');};
- try{x.send();}catch(e){log('CONFIG SEND ERROR '+e,'bad');}
-}
-
-function hlsLog(name,d){
- var s='HLS '+name;
- try{if(d){if(d.type)s+=' type='+d.type;if(d.details)s+=' details='+d.details;if(d.frag)s+=' sn='+d.frag.sn;if(d.stats&&d.stats.loaded!==undefined)s+=' loaded='+d.stats.loaded;}}catch(e){}
- log(s);
-}
-
-function request(start){
- var id=++serial;
- log('REQUEST start='+start+' serial='+id);
- var x=new XMLHttpRequest();
- x.open('GET',API+'/api/stream?url='+encodeURIComponent(SOURCE)+'&start='+encodeURIComponent(start),true);
- x.timeout=120000;
- x.onreadystatechange=function(){
-  if(x.readyState!==4)return;
-  log('API HTTP '+x.status+' serial='+id);
-  if(x.status<200||x.status>=300){log('API ERROR body='+x.responseText,'bad');return;}
-  var d;
-  try{d=JSON.parse(x.responseText);}catch(e){log('API JSON ERROR '+e,'bad');return;}
-  log('BACKEND RESPONSE start='+d.start+' generation='+d.generation+' duration='+d.duration+' url='+d.url);
-  if(id!==serial){log('IGNORED STALE RESPONSE serial='+id,'warn');return;}
-  totalDuration=Number(d.duration||0);streamStart=Number(d.start||0);
-  destroy();
-  if(!window.Hls||!Hls.isSupported()){log('HLS.JS NOT SUPPORTED','bad');return;}
-  HLS=new Hls({debug:false,maxBufferLength:30,backBufferLength:60,maxMaxBufferLength:120,enableWorker:true});
-  var events=[Hls.Events.MEDIA_ATTACHED,Hls.Events.MANIFEST_LOADING,Hls.Events.MANIFEST_LOADED,Hls.Events.MANIFEST_PARSED,Hls.Events.LEVEL_LOADING,Hls.Events.LEVEL_LOADED,Hls.Events.FRAG_LOADING,Hls.Events.FRAG_LOADED,Hls.Events.FRAG_PARSED,Hls.Events.BUFFER_CREATED,Hls.Events.BUFFER_APPENDED,Hls.Events.FRAG_BUFFERED,Hls.Events.AUDIO_TRACKS_UPDATED,Hls.Events.AUDIO_TRACK_SWITCHED,Hls.Events.ERROR];
-  events.forEach(function(ev){HLS.on(ev,function(e,data){hlsLog(ev,data);if(ev===Hls.Events.ERROR&&data&&data.fatal)log('FATAL HLS '+JSON.stringify({type:data.type,details:data.details,response:data.response||null}),'bad');stateNow();});});
-  HLS.on(Hls.Events.FRAG_BUFFERED,function(){mediaState('AFTER FRAG_BUFFERED');});
-  HLS.on(Hls.Events.MANIFEST_PARSED,function(){
-   log('MANIFEST_PARSED -> play()');mediaState('BEFORE PLAY');
-   try{var p=video.play();if(p&&p.then){p.then(function(){log('PLAY RESOLVED','ok');}).catch(function(e){log('PLAY REJECTED '+e,'bad');});}}catch(e){log('PLAY THROW '+e,'bad');}
-  });
-  video.onloadedmetadata=function(){log('LOADEDMETADATA duration='+fmt(video.duration)+' backend='+fmt(totalDuration));};
-  HLS.loadSource(d.url);HLS.attachMedia(video);log('HLS CREATED + loadSource + attachMedia');
- };
- x.onerror=function(){log('API NETWORK ERROR serial='+id,'bad');};
- x.ontimeout=function(){log('API TIMEOUT 120s serial='+id,'bad');};
- try{x.send();}catch(e){log('API SEND ERROR '+e,'bad');}
-}
-
-function testStart(n){log('================ TEST '+n+' ================');request(n);}
-function rapid(){log('================ RAPID 100/500/900 ================');request(100);setTimeout(function(){request(500);},50);setTimeout(function(){request(900);},100);}
-
-document.getElementById('b0').onclick=function(){testStart(0);};
-document.getElementById('b900').onclick=function(){testStart(900);};
-document.getElementById('brapid').onclick=function(){rapid();};
-document.getElementById('bclear').onclick=function(){clearLog();};
-setInterval(stateNow,500);
-
-getAPI(function(){testStart(0);});
-})();
+function stateNow(){state.textContent='paused='+video.paused+' readyState='+video.readyState+' networkState='+video.networkState+' current='+fmt(video.currentTime)+' global='+fmt(streamStart+video.currentTime)+'\nduration='+fmt(video.duration)+' total='+fmt(totalDuration)+' buffered=['+ranges(video.buffered)+'] seekable=['+ranges(video.seekable)+']\nHls='+(window.Hls?'YES '+Hls.version:'NO')+' audioAppends='+audioAppends+' videoAppends='+videoAppends+' fatalErrors='+fatalErrors;}
+function sleep(ms){return new Promise(function(r){setTimeout(r,ms);});}
+function fail(msg){log('FAIL: '+msg,'bad');throw new Error(msg);}
+window.onerror=function(msg,src,line,col){log('JAVASCRIPT ERROR '+msg+' @'+line+':'+col,'bad');};
+window.onunhandledrejection=function(e){log('UNHANDLED PROMISE '+e.reason,'bad');};
+['loadstart','loadedmetadata','loadeddata','canplay','canplaythrough','play','playing','pause','waiting','stalled','seeking','seeked','ended','emptied','abort'].forEach(function(ev){video.addEventListener(ev,function(){if(ev!=='timeupdate')log('VIDEO '+ev+' current='+fmt(video.currentTime)+' ready='+video.readyState+' buffered='+ranges(video.buffered));stateNow();},false);});
+video.addEventListener('timeupdate',stateNow,false);
+video.addEventListener('error',function(){var e=video.error;log('VIDEO ERROR code='+(e?e.code:'?')+' msg='+(e?e.message:'?'),'bad');},false);
+function destroy(){if(HLS){try{HLS.destroy();}catch(e){}HLS=null;}try{video.pause();}catch(e){}try{video.removeAttribute('src');video.load();}catch(e){}stateNow();}
+function getApi(){return new Promise(function(resolve,reject){var x=new XMLHttpRequest();x.open('GET','backend-url.json?fulltest='+Date.now(),true);x.timeout=15000;x.onreadystatechange=function(){if(x.readyState!==4)return;if(x.status!==200){reject(new Error('backend-url HTTP '+x.status));return;}try{var d=JSON.parse(x.responseText);API=(d.apiBase||d.url||'').replace(/\/$/,'');if(!API)reject(new Error('missing apiBase'));else{log('CONFIG OK '+API,'ok');resolve();}}catch(e){reject(e);}};x.onerror=function(){reject(new Error('config network error'));};x.ontimeout=function(){reject(new Error('config timeout'));};x.send();});}
+function api(start,allowStale){return new Promise(function(resolve,reject){var id=++serial,x=new XMLHttpRequest();x.open('GET',API+'/api/stream?url='+encodeURIComponent(SOURCE)+'&start='+encodeURIComponent(start),true);x.timeout=120000;x.onreadystatechange=function(){if(x.readyState!==4)return;var status=x.status,d=null;try{d=JSON.parse(x.responseText||'{}');}catch(e){}if(status>=200&&status<300){log('API '+start+' -> HTTP 200 start='+d.start+' gen='+d.generation,'ok');resolve({status:status,data:d,id:id});}else{log('API '+start+' -> HTTP '+status+' body='+x.responseText,(status===409?'warn':'bad'));if(allowStale&&status===409)resolve({status:status,data:d,id:id});else reject(new Error('API '+start+' HTTP '+status));}};x.onerror=function(){reject(new Error('API '+start+' network error'));};x.ontimeout=function(){reject(new Error('API '+start+' timeout'));};x.send();});}
+function waitForPlayback(url,start,target){return new Promise(function(resolve,reject){destroy();if(!window.Hls||!Hls.isSupported()){reject(new Error('Hls.js unsupported'));return;}totalDuration=0;streamStart=start;audioAppends=0;videoAppends=0;fatalErrors=0;HLS=new Hls({debug:false,maxBufferLength:30,backBufferLength:60,maxMaxBufferLength:120,enableWorker:true});var done=false,timer=setTimeout(function(){if(!done){done=true;reject(new Error('HLS buffer/play timeout'));}},30000);function finish(ok,msg){if(done)return;done=true;clearTimeout(timer);if(ok){log('HLS PASS '+msg,'ok');resolve();}else reject(new Error(msg));}
+HLS.on(Hls.Events.BUFFER_APPENDED,function(e,d){if(d&&d.type==='audio')audioAppends++;if(d&&d.type==='video')videoAppends++;});
+HLS.on(Hls.Events.ERROR,function(e,d){if(d&&d.fatal){fatalErrors++;log('FATAL HLS '+d.type+' '+d.details,'bad');}});
+HLS.on(Hls.Events.MANIFEST_PARSED,function(){log('MANIFEST_PARSED start='+start);});
+HLS.on(Hls.Events.FRAG_BUFFERED,function(e,d){if(done)return;if(d&&d.frag&&d.frag.type&&String(d.frag.type)!=='main')return;log('FRAG_BUFFERED sn='+(d&&d.frag?d.frag.sn:'?')+' buffered='+ranges(video.buffered));try{if(target!==null&&target!==undefined&&target>start)video.currentTime=target-start;}catch(x){}var p=video.play();if(p&&p.catch)p.catch(function(e){log('play rejected '+e,'warn');});setTimeout(function(){if(video.readyState>=3&&!video.paused){if(audioAppends<1||videoAppends<1)finish(false,'missing audio/video append');else if(fatalErrors)finish(false,'fatal HLS error');else finish(true,'playing with audio+video');}},1200);});
+HLS.attachMedia(video);HLS.loadSource(url);});}
+async function checkStream(start){log('--- STREAM TEST '+start+' ---');var r=await api(start,false),d=r.data;if(Number(d.start)!==start)fail('backend returned wrong start '+d.start+' expected '+start);if(!(Number(d.duration)>9000))fail('bad duration '+d.duration);await waitForPlayback(d.url,Number(d.start),Number(d.start));return d;}
+async function rapidTest(){log('--- RAPID LATEST-WINS TEST ---');var p1=api(100,true),p2=new Promise(function(resolve){setTimeout(function(){resolve(api(500,true));},50)}),p3=new Promise(function(resolve){setTimeout(function(){resolve(api(900,true));},100)});var r=await Promise.all([p1,p2,p3]);var ok200=r.filter(function(x){return x.status===200;}),stale=r.filter(function(x){return x.status===409;});if(ok200.length!==1||stale.length!==2)fail('expected 1x HTTP 200 + 2x HTTP 409, got '+r.map(function(x){return x.status;}).join(','));if(Number(ok200[0].data.start)!==900)fail('latest request returned start '+ok200[0].data.start);log('RAPID PASS: only latest 900 survived; older requests were 409','ok');return ok200[0].data;}
+async function clientSeekTest(){log('--- CLIENT BUFFER SEEK TEST ---');var d=await api(900,false);await waitForPlayback(d.url,900,900);await sleep(2500);var before=video.currentTime;var target=before+5;if(target>video.seekable.end(video.seekable.length-1)-1)target=Math.max(0,before-5);video.currentTime=target;await sleep(1200);if(Math.abs(video.currentTime-target)>1.5)fail('client seek landed at '+video.currentTime+' expected '+target);log('CLIENT SEEK PASS '+fmt(before)+' -> '+fmt(video.currentTime),'ok');var target2=Math.max(0,video.currentTime-5);video.currentTime=target2;await sleep(1200);if(Math.abs(video.currentTime-target2)>1.5)fail('reverse seek failed');log('REVERSE SEEK PASS -> '+fmt(video.currentTime),'ok');}
+async function full(){if(testRunning)return;testRunning=true;clearLog();log('========== FULL REGRESSION START =========','ok');try{if(!window.Hls)fail('Hls.js not loaded');await getApi();var h=new XMLHttpRequest();h.open('GET',API+'/health?fulltest='+Date.now(),true);h.timeout=10000;var hp=await new Promise(function(resolve,reject){h.onreadystatechange=function(){if(h.readyState!==4)return;if(h.status===200)resolve(h.responseText);else reject(new Error('health HTTP '+h.status));};h.onerror=function(){reject(new Error('health network error'));};h.ontimeout=function(){reject(new Error('health timeout'));};h.send();});log('HEALTH PASS '+hp,'ok');await checkStream(0);await checkStream(900);await rapidTest();await clientSeekTest();log('========== ALL TESTS PASSED =========','ok');alert('FULL REGRESSION PASSED');}catch(e){log('========== TEST FAILED: '+e.message+' =========','bad');alert('TEST FAILED: '+e.message);}finally{testRunning=false;stateNow();}}
+document.getElementById('full').onclick=full;document.getElementById('start0').onclick=function(){getApi().then(function(){return checkStream(0);}).catch(function(e){log('FAIL '+e.message,'bad');});};document.getElementById('start900').onclick=function(){getApi().then(function(){return checkStream(900);}).catch(function(e){log('FAIL '+e.message,'bad');});};document.getElementById('rapid').onclick=function(){getApi().then(rapidTest).catch(function(e){log('FAIL '+e.message,'bad');});};document.getElementById('clear').onclick=clearLog;setInterval(stateNow,500);log('READY: press FULL REGRESSION once');})();
 </script>
 </body>
 </html>
