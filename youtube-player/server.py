@@ -8,7 +8,7 @@ PORT=8765
 BASE_URL='https://REPLACED_BY_START_SCRIPT.trycloudflare.com'
 ROOT=os.path.expanduser('~/vidaa_streams')
 URL_TTL=45*60
-HLS_TIME=4
+HLS_TIME=2
 HLS_LIST_SIZE=30
 READY_TIMEOUT=90
 os.makedirs(ROOT, exist_ok=True)
@@ -182,7 +182,7 @@ class Handler(BaseHTTPRequestHandler):
         if p=='/api/stream':
             source=q.get('url',[''])[0]
             if not source:return self.json({'error':'missing url'},400)
-            m=re.search(r'(?:v=|youtu\.be/|/shorts/|/embed/)([A-Za-z0-9_-]{11})',source)
+            m=re.search(r'(?:v=|youtu\\.be/|/shorts/|/embed/)([A-Za-z0-9_-]{11})',source)
             if not m:return self.json({'error':'invalid YouTube URL'},400)
             v=m.group(1)
             try:start=max(0,float(q.get('start',['0'])[0]))
