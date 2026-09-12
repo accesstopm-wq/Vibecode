@@ -40,12 +40,13 @@ def extract_streams(source):
     return v,a,duration
 
 def state_for(v):
-    return STATES.setdefault(v,{'video_url':None,'audio_url':None,'duration':0,'url_time':0,'active':None,'building':None,'generation':0,'desired_start':0.0,'worker':None,'source_url':None,'condition':threading.Condition(LOCK)})
+    return STATES.setdefault(v,{'video_url':None,'audio_url':None,'duration':0,'url_time':0,'active':None,'building':None,'generation':0,'source_url':None,'condition':threading.Condition(LOCK)})
 
 def cached_streams(v,source):
     with LOCK:
         s=state_for(v)
-        if s['video_url'] and s['audio_url'] and now()-s['url_time']<URL_TTL:return s['video_url'],s['audio_url'],s.get('duration',0)
+        if s['video_url'] and s['audio_url'] and now()-s['url_time']<URL_TTL:
+            return s['video_url'],s['audio_url'],s.get('duration',0)
     print('[backend] extracting YouTube URLs:',v,flush=True)
     vu,au,duration=extract_streams(source)
     with LOCK:
@@ -71,6 +72,7 @@ def ffmpeg(v,t,vu,au,start):
 
 def cleanup(sess):
     if not sess:return
+    sess['cancelled']=True
     try:
         p=sess.get('process')
         if p and p.poll() is None:
@@ -81,107 +83,92 @@ def cleanup(sess):
     try:
         if sess.get('log'):sess['log'].close()
     except Exception:pass
-    shutil.rmtree(sess['dir'],ignore_errors=True)
-    with LOCK:SESSIONS.pop(sess['token'],None)
+    shutil.rmtree(sess.get('dir',''),ignore_errors=True)
+    with LOCK:SESSIONS.pop(sess.get('token'),None)
 
-def worker(v,source):
-    while True:
+def build(v,source,b):
+    try:
         with LOCK:
             s=STATES.get(v)
-            if not s:return
-            b=s.get('building');gen=s['generation'];target=s['desired_start']
-        if b:
-            deadline=now()+READY_TIMEOUT
-            while now()<deadline:
-                with LOCK:
-                    s=STATES.get(v)
-                    if not s:return
-                    newer=s['generation']!=b['generation']
-                if newer:
-                    cleanup(b);break
-                if ready(b):break
-                p=b.get('process')
-                if p and p.poll() is not None:break
-                time.sleep(.2)
-            if ready(b):
-                with LOCK:
-                    s=STATES.get(v)
-                    if not s:cleanup(b);return
-                    if s['generation']==b['generation']:
-                        old=s.get('active');s['active']=b;s['building']=None;b['active']=True
-                        print('[backend] SWITCH',v,'start=',b['start'],flush=True);s['condition'].notify_all()
-                        if old and old is not b:
-                            print('[backend] CLEANUP OLD',v,'start=',old['start'],flush=True)
-                            cleanup(old)
-                    else:
-                        s['building']=None;s['condition'].notify_all();cleanup(b)
-            else:
-                with LOCK:
-                    s=STATES.get(v)
-                    if s and s.get('building') is b:s['building']=None;s['condition'].notify_all()
-                cleanup(b)
-            continue
-        try:vu,au,duration=cached_streams(v,source)
-        except Exception as e:
-            print('[backend] extraction failed:',repr(e),flush=True)
-            with LOCK:
-                s=STATES.get(v)
-                if s:s['building']=None;s['condition'].notify_all()
-            return
+            if not s or s.get('generation')!=b['generation'] or s.get('building') is not b:
+                b['cancelled']=True
+        if b.get('cancelled'): return
+        vu,au,duration=cached_streams(v,source)
         with LOCK:
             s=STATES.get(v)
-            if not s:return
-            gen=s['generation'];target=s['desired_start'];active=s.get('active')
-            if active and abs(active['start']-target)<1:return
-            if s.get('building'):continue
-            t=token(gen);b={'video_id':v,'token':t,'generation':gen,'start':target,'duration':duration,'dir':sess_dir(v,t),'process':None,'log':None,'active':False};SESSIONS[t]=b;s['building']=b
-        print('[backend] BUILD',v,'start=',target,'generation=',gen,flush=True)
-        try:
-            p,log=ffmpeg(v,t,vu,au,target)
-            with LOCK:b['process']=p;b['log']=log
-            deadline=now()+READY_TIMEOUT
-            while now()<deadline:
-                if ready(b):break
-                if p.poll() is not None:break
-                time.sleep(.2)
-            if not ready(b):
-                print('[backend] BUILD FAILED',v,flush=True)
-                with LOCK:
-                    s=STATES.get(v)
-                    if s and s.get('building') is b:s['building']=None;s['condition'].notify_all()
-                cleanup(b);continue
-            with LOCK:
-                s=STATES.get(v)
-                if not s:cleanup(b);return
-                if s['generation']==gen:
-                    old=s.get('active');s['active']=b;s['building']=None;b['active']=True;print('[backend] READY/SWITCH',v,'start=',target,flush=True);s['condition'].notify_all()
-                    if old and old is not b:
-                        print('[backend] CLEANUP OLD',v,'start=',old['start'],flush=True)
-                        cleanup(old)
-                    if s['generation']==gen:return
-                else:
-                    s['building']=None;s['condition'].notify_all();cleanup(b)
-        except Exception as e:
-            print('[backend] worker exception:',repr(e),flush=True)
-            with LOCK:
-                s=STATES.get(v)
-                if s and s.get('building') is b:s['building']=None;s['condition'].notify_all()
-            cleanup(b)
-
-def request(v,source,start,wait_new=False):
-    with LOCK:
-        s=state_for(v);s['source_url']=source;active=s.get('active')
-        if active and abs(active['start']-start)<1:return active
-        s['generation']+=1;s['desired_start']=start;gen=s['generation'];w=s.get('worker')
-        if not w or not w.is_alive():
-            w=threading.Thread(target=worker,args=(v,source),daemon=True);s['worker']=w;w.start()
-        if not wait_new and active:return active
+            if not s or s.get('generation')!=b['generation'] or s.get('building') is not b:
+                b['cancelled']=True
+        if b.get('cancelled'): return
+        print('[backend] BUILD',v,'start=',b['start'],'generation=',b['generation'],flush=True)
+        p,log=ffmpeg(v,b['token'],vu,au,b['start'])
+        with LOCK:b['process']=p;b['log']=log
         deadline=now()+READY_TIMEOUT
         while now()<deadline:
+            with LOCK:
+                s=STATES.get(v)
+                stale=(not s or s.get('generation')!=b['generation'] or s.get('building') is not b or b.get('cancelled'))
+            if stale:
+                b['cancelled']=True
+                break
+            if ready(b): break
+            if p.poll() is not None: break
+            time.sleep(.2)
+        if b.get('cancelled') or not ready(b):
+            if not b.get('cancelled'): print('[backend] BUILD FAILED',v,'start=',b['start'],flush=True)
+            return
+        old=None
+        with LOCK:
+            s=STATES.get(v)
+            if not s or s.get('generation')!=b['generation'] or s.get('building') is not b:
+                b['cancelled']=True
+            else:
+                old=s.get('active');s['active']=b;s['building']=None;b['active']=True;b['duration']=duration
+                print('[backend] READY/SWITCH',v,'start=',b['start'],'generation=',b['generation'],flush=True)
+                s['condition'].notify_all()
+        if b.get('cancelled'):
+            return
+        if old and old is not b:
+            print('[backend] CLEANUP OLD',v,'start=',old['start'],flush=True)
+            cleanup(old)
+    except Exception as e:
+        print('[backend] build exception:',repr(e),flush=True)
+        with LOCK:
+            s=STATES.get(v)
+            if s and s.get('building') is b:
+                s['building']=None;s['condition'].notify_all()
+    finally:
+        with LOCK:
+            s=STATES.get(v)
+            if s and s.get('building') is b and (b.get('cancelled') or b.get('active')):
+                s['building']=None;s['condition'].notify_all()
+        if b.get('cancelled') and not b.get('active'):
+            cleanup(b)
+
+def request(v,source,start):
+    old_build=None
+    with LOCK:
+        s=state_for(v);s['source_url']=source;active=s.get('active')
+        if active and abs(active['start']-start)<1:return active,None
+        s['generation']+=1;gen=s['generation']
+        old_build=s.get('building')
+        if old_build:
+            old_build['cancelled']=True
+        t=token(gen)
+        b={'video_id':v,'token':t,'generation':gen,'start':start,'duration':s.get('duration',0),'dir':sess_dir(v,t),'process':None,'log':None,'active':False,'cancelled':False}
+        SESSIONS[t]=b;s['building']=b
+        worker=threading.Thread(target=build,args=(v,source,b),daemon=True);worker.start()
+    if old_build:cleanup(old_build)
+    deadline=now()+READY_TIMEOUT
+    with LOCK:
+        s=STATES.get(v)
+        while now()<deadline:
+            if s.get('generation')!=gen:
+                return None,'superseded'
             active=s.get('active')
-            if active and active['generation']>=gen:return active
-            s['condition'].wait(timeout=.25)
-        return s.get('active')
+            if active and active.get('generation')==gen:
+                return active,None
+            s['condition'].wait(timeout=.2)
+        return None,'timeout'
 
 class Handler(BaseHTTPRequestHandler):
     protocol_version='HTTP/1.1'
@@ -200,10 +187,11 @@ class Handler(BaseHTTPRequestHandler):
             v=m.group(1)
             try:start=max(0,float(q.get('start',['0'])[0]))
             except:start=0
-            with LOCK:s=state_for(v);active=s.get('active')
-            wait_new=active is not None and abs(active.get('start',0)-start)>1
-            sess=request(v,source,start,wait_new)
-            if not sess:return self.json({'error':'stream build failed'},502)
+            sess,err=request(v,source,start)
+            if not sess:
+                if err=='superseded':return self.json({'ok':False,'stale':True,'error':'request superseded'},409)
+                if err=='timeout':return self.json({'ok':False,'error':'stream build timeout'},504)
+                return self.json({'ok':False,'error':'stream build failed'},502)
             duration=state_for(v).get('duration',0)
             url=BASE_URL.rstrip('/')+'/hls/'+v+'/'+sess['token']+'/index.m3u8'
             return self.json({'ok':True,'videoId':v,'url':url,'start':sess['start'],'duration':duration,'generation':sess['generation']})
