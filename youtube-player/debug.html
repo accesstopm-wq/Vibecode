@@ -3,338 +3,150 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>YT HLS DEBUG</title>
+<title>YT HLS DEBUG 2</title>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1.7.2/dist/hls.light.min.js"></script>
 <style>
 body{margin:0;background:#111;color:#eee;font:14px monospace;padding:10px}
-video{width:100%;max-height:45vh;background:#000}
-button{font:16px monospace;padding:10px;margin:4px}
-#state{padding:8px;background:#222;margin:8px 0;white-space:pre-wrap}
-#log{white-space:pre-wrap;word-break:break-all;background:#181818;padding:8px;height:45vh;overflow:auto}
+video{width:100%;max-height:40vh;background:#000}
+button{font:16px monospace;padding:12px;margin:4px;min-width:150px}
+#state{padding:8px;background:#222;margin:8px 0;white-space:pre-wrap;word-break:break-all}
+#log{white-space:pre-wrap;word-break:break-all;background:#181818;padding:8px;height:42vh;overflow:auto}
 .ok{color:#8f8}.bad{color:#f88}.warn{color:#fc8}
 </style>
 </head>
 <body>
-
-<h3>YT HLS DEBUG</h3>
-
+<h3>YT HLS DEBUG 2</h3>
 <video id="video" controls playsinline></video>
-
 <div>
-<button onclick="testStart(0)">START 0</button>
-<button onclick="testStart(900)">START 900</button>
-<button onclick="rapid()">RAPID 100/500/900</button>
-<button onclick="clearLog()">CLEAR</button>
+<button id="b0">START 0</button>
+<button id="b900">START 900</button>
+<button id="brapid">RAPID 100/500/900</button>
+<button id="bclear">CLEAR</button>
 </div>
-
-<div id="state">Starting...</div>
+<div id="state">PAGE SCRIPT STARTED...</div>
 <div id="log"></div>
-
 <script>
+(function(){
 var video=document.getElementById('video');
 var state=document.getElementById('state');
 var logEl=document.getElementById('log');
-
-var HLS=null;
-var API='';
-var SOURCE='https://youtu.be/RZZzMCcwfnY?si=6QEf6511HZDURoiH';
-var totalDuration=0;
-var streamStart=0;
-var serial=0;
+var HLS=null,API='',SOURCE='https://youtu.be/RZZzMCcwfnY?si=6QEf6511HZDURoiH',totalDuration=0,streamStart=0,serial=0;
 
 function log(s,cls){
-    var t=new Date().toISOString().substr(11,12)+' '+s;
-    var d=document.createElement('div');
-    if(cls)d.className=cls;
-    d.textContent=t;
-    logEl.appendChild(d);
-    logEl.scrollTop=logEl.scrollHeight;
+ var t=new Date().toISOString().substr(11,12)+' '+s;
+ var d=document.createElement('div');
+ if(cls)d.className=cls;
+ d.textContent=t;
+ logEl.appendChild(d);logEl.scrollTop=logEl.scrollHeight;
 }
-
-function clearLog(){
-    logEl.innerHTML='';
-}
-
-function fmt(n){
-    if(!isFinite(n))return '?';
-    return Number(n).toFixed(3);
-}
-
+function clearLog(){logEl.innerHTML='';}
+function fmt(n){return isFinite(n)?Number(n).toFixed(3):'?';}
+function ranges(r){var a=[],i;try{for(i=0;i<r.length;i++)a.push(fmt(r.start(i))+'-'+fmt(r.end(i)));}catch(e){}return a.join(',')||'-';}
 function stateNow(){
-    var b=[];
-    var s=[];
-    var i;
-
-    try{
-        for(i=0;i<video.buffered.length;i++)
-            b.push(fmt(video.buffered.start(i))+'-'+fmt(video.buffered.end(i)));
-    }catch(e){}
-
-    try{
-        for(i=0;i<video.seekable.length;i++)
-            s.push(fmt(video.seekable.start(i))+'-'+fmt(video.seekable.end(i)));
-    }catch(e){}
-
-    state.textContent=
-        'paused='+video.paused+
-        ' playing='=!video.paused+
-        ' readyState='+video.readyState+
-        ' networkState='+video.networkState+
-        '\ncurrentTime='+fmt(video.currentTime)+
-        ' streamStart='+fmt(streamStart)+
-        ' GLOBAL='+(isFinite(video.currentTime)?fmt(streamStart+video.currentTime):'?')+
-        '\nduration='+fmt(video.duration)+
-        ' totalDuration='+fmt(totalDuration)+
-        '\nbuffered=['+b.join(', ')+']'+
-        '\nseekable=['+s.join(', ')+']';
+ state.textContent='paused='+video.paused+' readyState='+video.readyState+' networkState='+video.networkState+
+ '\ncurrent='+fmt(video.currentTime)+' streamStart='+fmt(streamStart)+' GLOBAL='+fmt(streamStart+video.currentTime)+
+ '\nduration='+fmt(video.duration)+' totalDuration='+fmt(totalDuration)+
+ '\nbuffered=['+ranges(video.buffered)+'] seekable=['+ranges(video.seekable)+']'+
+ '\nHls.js='+(window.Hls?'YES version='+Hls.version:'NO');
 }
+function mediaState(prefix){log(prefix+' paused='+video.paused+' readyState='+video.readyState+' networkState='+video.networkState+' current='+fmt(video.currentTime)+' duration='+fmt(video.duration)+' buffered='+ranges(video.buffered)+' seekable='+ranges(video.seekable));}
 
-function mediaState(prefix){
-    log(prefix+
-        ' paused='+video.paused+
-        ' readyState='+video.readyState+
-        ' networkState='+video.networkState+
-        ' current='+fmt(video.currentTime)+
-        ' duration='+fmt(video.duration)+
-        ' buffered='+bufferedText()+
-        ' seekable='+seekableText());
-}
+window.onerror=function(msg,src,line,col,err){
+ log('JAVASCRIPT ERROR: '+msg+' @ '+line+':'+col,'bad');
+ state.textContent='JAVASCRIPT ERROR: '+msg+' @ '+line+':'+col;
+ return false;
+};
+window.onunhandledrejection=function(e){log('UNHANDLED PROMISE: '+e.reason,'bad');};
 
-function bufferedText(){
-    var a=[],i;
-    try{
-        for(i=0;i<video.buffered.length;i++)
-            a.push(fmt(video.buffered.start(i))+'-'+fmt(video.buffered.end(i)));
-    }catch(e){}
-    return a.join(',');
-}
+if(!video){log('VIDEO ELEMENT NOT FOUND','bad');return;}
+log('SCRIPT INITIALIZED','ok');
+log('Hls global='+(window.Hls?'YES version='+Hls.version:'NO'),'warn');
+log('SOURCE='+SOURCE);
 
-function seekableText(){
-    var a=[],i;
-    try{
-        for(i=0;i<video.seekable.length;i++)
-            a.push(fmt(video.seekable.start(i))+'-'+fmt(video.seekable.end(i)));
-    }catch(e){}
-    return a.join(',');
-}
-
-function tracks(){
-    var a=[];
-    try{
-        if(video.videoTracks){
-            for(var i=0;i<video.videoTracks.length;i++)
-                a.push('VIDEO '+i+' '+video.videoTracks[i].label);
-        }
-    }catch(e){}
-
-    try{
-        if(video.audioTracks){
-            for(var j=0;j<video.audioTracks.length;j++)
-                a.push('AUDIO '+j+' '+video.audioTracks[j].label+
-                       ' enabled='+video.audioTracks[j].enabled);
-        }
-    }catch(e){}
-
-    return a.join(' | ')||'native track lists unavailable';
-}
-
-[
-'loadstart','durationchange','loadedmetadata','loadeddata',
-'progress','canplay','canplaythrough','play','playing',
-'pause','waiting','stalled','suspend','seeking','seeked',
-'timeupdate','ended','emptied','abort'
-].forEach(function(ev){
-    video.addEventListener(ev,function(){
-        stateNow();
-        if(ev!=='timeupdate'&&ev!=='progress')
-            mediaState('VIDEO '+ev);
-    },false);
+['loadstart','durationchange','loadedmetadata','loadeddata','progress','canplay','canplaythrough','play','playing','pause','waiting','stalled','suspend','seeking','seeked','timeupdate','ended','emptied','abort'].forEach(function(ev){
+ video.addEventListener(ev,function(){stateNow();if(ev!=='timeupdate'&&ev!=='progress')mediaState('VIDEO '+ev);},false);
 });
-
-video.addEventListener('error',function(){
-    var e=video.error;
-    log('VIDEO ERROR code='+(e?e.code:'?')+
-        ' message='+(e?e.message:'?'),'bad');
-    mediaState('AFTER VIDEO ERROR');
-},false);
-
-function hlsEvent(name,data){
-    var s='';
-    if(data){
-        try{
-            if(data.type)s+=' type='+data.type;
-            if(data.details)s+=' details='+data.details;
-            if(data.frag)s+=' frag.sn='+data.frag.sn;
-            if(data.frag&&data.frag.url)s+=' url='+data.frag.url;
-            if(data.stats){
-                if(data.stats.loaded!==undefined)s+=' loaded='+data.stats.loaded;
-                if(data.stats.loading&&data.stats.loading.start)
-                    s+=' loadTime='+(data.stats.loading.end-data.stats.loading.start);
-            }
-        }catch(e){}
-    }
-    log('HLS '+name+s);
-}
+video.addEventListener('error',function(){var e=video.error;log('VIDEO ERROR code='+(e?e.code:'?')+' message='+(e?e.message:'?'),'bad');mediaState('AFTER VIDEO ERROR');},false);
 
 function destroy(){
-    if(HLS){
-        try{HLS.destroy();}catch(e){}
-        HLS=null;
-    }
-    try{video.pause();}catch(e){}
-    try{video.removeAttribute('src');video.load();}catch(e){}
+ if(HLS){try{HLS.destroy();}catch(e){log('HLS destroy error '+e,'bad');}HLS=null;}
+ try{video.pause();}catch(e){}
+ try{video.removeAttribute('src');video.load();}catch(e){}
+ stateNow();
 }
 
 function getAPI(done){
-    fetch('backend-url.json?debug='+Date.now())
-    .then(function(r){return r.json();})
-    .then(function(x){
-        API=(x.apiBase||x.url||'').replace(/\/$/,'');
-        log('API='+API,'ok');
-        done();
-    })
-    .catch(function(e){
-        log('BACKEND CONFIG ERROR '+e,'bad');
-    });
+ log('GET backend-url.json...');
+ var x=new XMLHttpRequest();
+ x.open('GET','backend-url.json?debug='+new Date().getTime(),true);
+ x.timeout=10000;
+ x.onreadystatechange=function(){
+  if(x.readyState!==4)return;
+  log('CONFIG HTTP '+x.status);
+  if(x.status<200||x.status>=300){log('CONFIG HTTP ERROR body='+x.responseText,'bad');return;}
+  try{
+   var obj=JSON.parse(x.responseText);
+   API=(obj.apiBase||obj.url||'').replace(/\/$/,'');
+   log('API='+API,'ok');
+   if(!API){log('CONFIG HAS NO apiBase/url','bad');return;}
+   done();
+  }catch(e){log('CONFIG JSON ERROR '+e+' body='+x.responseText,'bad');}
+ };
+ x.onerror=function(){log('CONFIG NETWORK ERROR','bad');};
+ x.ontimeout=function(){log('CONFIG TIMEOUT 10s','bad');};
+ try{x.send();}catch(e){log('CONFIG SEND ERROR '+e,'bad');}
 }
 
-function request(start,callback){
-    var id=++serial;
-
-    log('REQUEST start='+start+' serial='+id);
-
-    fetch(API+'/api/stream?url='+encodeURIComponent(SOURCE)+
-          '&start='+encodeURIComponent(start))
-    .then(function(r){return r.json();})
-    .then(function(d){
-        if(id!==serial){
-            log('IGNORED RESPONSE serial='+id);
-            return;
-        }
-
-        log('BACKEND RESPONSE start='+d.start+
-            ' generation='+d.generation+
-            ' duration='+d.duration);
-
-        if(d.duration)totalDuration=Number(d.duration);
-        streamStart=Number(d.start||0);
-
-        destroy();
-
-        if(!window.Hls||!Hls.isSupported()){
-            log('HLS.JS NOT SUPPORTED','bad');
-            return;
-        }
-
-        HLS=new Hls({
-            debug:false,
-            maxBufferLength:30,
-            backBufferLength:60,
-            maxMaxBufferLength:120,
-            enableWorker:true
-        });
-
-        var events=[
-            Hls.Events.MEDIA_ATTACHED,
-            Hls.Events.MANIFEST_LOADING,
-            Hls.Events.MANIFEST_LOADED,
-            Hls.Events.MANIFEST_PARSED,
-            Hls.Events.LEVEL_LOADING,
-            Hls.Events.LEVEL_LOADED,
-            Hls.Events.FRAG_LOADING,
-            Hls.Events.FRAG_LOADED,
-            Hls.Events.FRAG_PARSED,
-            Hls.Events.BUFFER_CREATED,
-            Hls.Events.BUFFER_APPENDED,
-            Hls.Events.AUDIO_TRACKS_UPDATED,
-            Hls.Events.AUDIO_TRACK_SWITCHED,
-            Hls.Events.ERROR
-        ];
-
-        events.forEach(function(ev){
-            HLS.on(ev,function(e,d){
-                hlsEvent(ev,d);
-
-                if(ev===Hls.Events.ERROR){
-                    if(d&&d.fatal){
-                        log('FATAL HLS ERROR type='+
-                            d.type+' details='+d.details+
-                            ' response='+(d.response?JSON.stringify(d.response):''),
-                            'bad');
-                    }
-                }
-
-                if(ev===Hls.Events.MANIFEST_PARSED){
-                    log('MANIFEST_PARSED -> video.play()');
-                    mediaState('BEFORE PLAY');
-
-                    var p=video.play();
-
-                    if(p&&p.then){
-                        p.then(function(){
-                            log('video.play() RESOLVED','ok');
-                            mediaState('AFTER PLAY RESOLVED');
-                        }).catch(function(err){
-                            log('video.play() REJECTED '+err,'bad');
-                        });
-                    }
-                }
-
-                stateNow();
-            });
-        });
-
-        HLS.on(Hls.Events.ERROR,function(e,d){
-            if(d&&d.fatal){
-                log('HLS FATAL '+JSON.stringify({
-                    type:d.type,
-                    details:d.details,
-                    fatal:d.fatal
-                }),'bad');
-            }
-        });
-
-        video.addEventListener('loadedmetadata',function onceMeta(){
-            log('TRACKS: '+tracks());
-            log('NATIVE duration='+fmt(video.duration)+
-                ' backend duration='+fmt(totalDuration));
-        },false);
-
-        HLS.loadSource(d.url);
-        HLS.attachMedia(video);
-
-        log('HLS attachMedia + loadSource DONE');
-    })
-    .catch(function(e){
-        log('API REQUEST ERROR '+e,'bad');
-    });
+function hlsLog(name,d){
+ var s='HLS '+name;
+ try{if(d){if(d.type)s+=' type='+d.type;if(d.details)s+=' details='+d.details;if(d.frag)s+=' sn='+d.frag.sn;if(d.stats&&d.stats.loaded!==undefined)s+=' loaded='+d.stats.loaded;}}catch(e){}
+ log(s);
 }
 
-function testStart(start){
-    log('');
-    log('==============================');
-    log('TEST START '+start);
-    log('==============================');
-    request(start);
+function request(start){
+ var id=++serial;
+ log('REQUEST start='+start+' serial='+id);
+ var x=new XMLHttpRequest();
+ x.open('GET',API+'/api/stream?url='+encodeURIComponent(SOURCE)+'&start='+encodeURIComponent(start),true);
+ x.timeout=120000;
+ x.onreadystatechange=function(){
+  if(x.readyState!==4)return;
+  log('API HTTP '+x.status+' serial='+id);
+  if(x.status<200||x.status>=300){log('API ERROR body='+x.responseText,'bad');return;}
+  var d;
+  try{d=JSON.parse(x.responseText);}catch(e){log('API JSON ERROR '+e,'bad');return;}
+  log('BACKEND RESPONSE start='+d.start+' generation='+d.generation+' duration='+d.duration+' url='+d.url);
+  if(id!==serial){log('IGNORED STALE RESPONSE serial='+id,'warn');return;}
+  totalDuration=Number(d.duration||0);streamStart=Number(d.start||0);
+  destroy();
+  if(!window.Hls||!Hls.isSupported()){log('HLS.JS NOT SUPPORTED','bad');return;}
+  HLS=new Hls({debug:false,maxBufferLength:30,backBufferLength:60,maxMaxBufferLength:120,enableWorker:true});
+  var events=[Hls.Events.MEDIA_ATTACHED,Hls.Events.MANIFEST_LOADING,Hls.Events.MANIFEST_LOADED,Hls.Events.MANIFEST_PARSED,Hls.Events.LEVEL_LOADING,Hls.Events.LEVEL_LOADED,Hls.Events.FRAG_LOADING,Hls.Events.FRAG_LOADED,Hls.Events.FRAG_PARSED,Hls.Events.BUFFER_CREATED,Hls.Events.BUFFER_APPENDED,Hls.Events.FRAG_BUFFERED,Hls.Events.AUDIO_TRACKS_UPDATED,Hls.Events.AUDIO_TRACK_SWITCHED,Hls.Events.ERROR];
+  events.forEach(function(ev){HLS.on(ev,function(e,data){hlsLog(ev,data);if(ev===Hls.Events.ERROR&&data&&data.fatal)log('FATAL HLS '+JSON.stringify({type:data.type,details:data.details,response:data.response||null}),'bad');stateNow();});});
+  HLS.on(Hls.Events.FRAG_BUFFERED,function(){mediaState('AFTER FRAG_BUFFERED');});
+  HLS.on(Hls.Events.MANIFEST_PARSED,function(){
+   log('MANIFEST_PARSED -> play()');mediaState('BEFORE PLAY');
+   try{var p=video.play();if(p&&p.then){p.then(function(){log('PLAY RESOLVED','ok');}).catch(function(e){log('PLAY REJECTED '+e,'bad');});}}catch(e){log('PLAY THROW '+e,'bad');}
+  });
+  video.onloadedmetadata=function(){log('LOADEDMETADATA duration='+fmt(video.duration)+' backend='+fmt(totalDuration));};
+  HLS.loadSource(d.url);HLS.attachMedia(video);log('HLS CREATED + loadSource + attachMedia');
+ };
+ x.onerror=function(){log('API NETWORK ERROR serial='+id,'bad');};
+ x.ontimeout=function(){log('API TIMEOUT 120s serial='+id,'bad');};
+ try{x.send();}catch(e){log('API SEND ERROR '+e,'bad');}
 }
 
-function rapid(){
-    log('');
-    log('==============================');
-    log('RAPID TEST 100 -> 500 -> 900');
-    log('==============================');
+function testStart(n){log('================ TEST '+n+' ================');request(n);}
+function rapid(){log('================ RAPID 100/500/900 ================');request(100);setTimeout(function(){request(500);},50);setTimeout(function(){request(900);},100);}
 
-    request(100);
-    setTimeout(function(){request(500);},50);
-    setTimeout(function(){request(900);},100);
-}
-
+document.getElementById('b0').onclick=function(){testStart(0);};
+document.getElementById('b900').onclick=function(){testStart(900);};
+document.getElementById('brapid').onclick=function(){rapid();};
+document.getElementById('bclear').onclick=function(){clearLog();};
 setInterval(stateNow,500);
 
-getAPI(function(){
-    log('SOURCE='+SOURCE);
-    testStart(0);
-});
+getAPI(function(){testStart(0);});
+})();
 </script>
 </body>
 </html>
