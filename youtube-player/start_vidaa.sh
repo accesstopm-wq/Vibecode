@@ -12,6 +12,17 @@ if [ ! -f "$SERVER" ]; then
   exit 1
 fi
 
+# Keep the local main branch exactly in sync with GitHub.
+git -C "$REPO_DIR" switch main >/dev/null 2>&1 || true
+git -C "$REPO_DIR" fetch origin main
+if ! git -C "$REPO_DIR" reset --hard origin/main; then
+  echo "ERROR: could not sync local main with origin/main"
+  exit 1
+fi
+
+git -C "$REPO_DIR" fetch origin "$TUNNEL_BRANCH"
+git -C "$REPO_DIR" switch -C "$TUNNEL_BRANCH" "origin/$TUNNEL_BRANCH"
+
 pkill -f "python.*server.py" 2>/dev/null || true
 pkill -f cloudflared 2>/dev/null || true
 sleep 2
@@ -29,6 +40,7 @@ done
 if [ -z "$URL" ]; then
   echo "ERROR: Cloudflare URL not found"
   cat "$HOME/cloudflared.log"
+  git -C "$REPO_DIR" switch main >/dev/null 2>&1 || true
   exit 1
 fi
 
@@ -42,11 +54,9 @@ HEALTH=$(curl -s --max-time 10 http://127.0.0.1:8765/health || true)
 echo "Backend: $HEALTH"
 case "$HEALTH" in
   *'"ok":true'*|*'"ok": true'*) ;;
-  *) echo "ERROR: backend did not start"; tail -30 "$HOME/server.log"; exit 1;;
+  *) echo "ERROR: backend did not start"; tail -30 "$HOME/server.log"; git -C "$REPO_DIR" switch main >/dev/null 2>&1 || true; exit 1;;
 esac
 
-git -C "$REPO_DIR" fetch origin "$TUNNEL_BRANCH"
-git -C "$REPO_DIR" switch -C "$TUNNEL_BRANCH" "origin/$TUNNEL_BRANCH"
 printf '{"apiBase":"%s"}\n' "$URL" > "$CONFIG_FILE"
 
 git -C "$REPO_DIR" add vidaa-backend-url.json
