@@ -4,7 +4,6 @@ on:
   push:
     paths:
       - 'youtube-player/**'
-      - '!youtube-player/backend-url.json'
       - '.github/workflows/deploy-vidaa-test.yml'
   workflow_dispatch:
 
