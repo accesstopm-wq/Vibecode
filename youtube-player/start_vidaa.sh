@@ -76,12 +76,11 @@ fi
 git -C "$REPO_DIR" switch main
 
 echo "Checking GitHub config..."
-REMOTE_JSON=$(curl -fsS --max-time 15 "$CONFIG_URL&ts=$(date +%s%N)" || true)
-REMOTE_CONFIG=$(printf '%s' "$REMOTE_JSON" | python -c 'import sys,json,base64; d=json.load(sys.stdin); print(base64.b64decode(d["content"]).decode().strip(), end="")' 2>/dev/null || true)
-echo "GITHUB API: $REMOTE_CONFIG"
+REMOTE_CONFIG=$(git -C "$REPO_DIR" show "origin/$TUNNEL_BRANCH:vidaa-backend-url.json" 2>/dev/null || true)
+echo "GITHUB GIT: $REMOTE_CONFIG"
 EXPECTED=$(printf '{"apiBase":"%s"}' "$URL")
 if [ "$REMOTE_CONFIG" != "$EXPECTED" ]; then
-  echo "ERROR: GitHub config does not contain the new tunnel URL"
+  echo "ERROR: GitHub branch does not contain the new tunnel URL"
   echo "Expected: $EXPECTED"
   echo "Received: $REMOTE_CONFIG"
   exit 1
