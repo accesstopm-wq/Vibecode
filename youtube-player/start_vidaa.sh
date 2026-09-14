@@ -3,16 +3,11 @@ set -u
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 SERVER="$SCRIPT_DIR/server.py"
-CONFIG_TOKEN_FILE="/storage/emulated/0/Documents/.vidaa-config-token.txt"
-PROXY_CONFIG_URL="https://raw.githubusercontent.com/accesstopm-wq/Vibecode/main/youtube-player/backend-url.json"
+REPO_DIR="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
+CONFIG_FILE="$REPO_DIR/vidaa-backend-url.json"
 
 if [ ! -f "$SERVER" ]; then
   echo "ERROR: server.py not found: $SERVER"
-  exit 1
-fi
-
-if [ ! -f "$CONFIG_TOKEN_FILE" ]; then
-  echo "ERROR: config token missing: $CONFIG_TOKEN_FILE"
   exit 1
 fi
 
@@ -49,38 +44,17 @@ case "$HEALTH" in
   *) echo "ERROR: backend did not start"; tail -30 "$HOME/server.log"; exit 1;;
 esac
 
-PROXY_URL=$(curl -fsS --max-time 10 "${PROXY_CONFIG_URL}?ts=$(date +%s)" | python -c 'import sys,json; print(json.load(sys.stdin).get("apiBase",""))' 2>/dev/null || true)
-if [ -z "$PROXY_URL" ]; then
-  echo "ERROR: stable config proxy URL not found"
-  exit 1
-fi
+printf '{"apiBase":"%s"}\n' "$URL" > "$CONFIG_FILE"
 
-CONFIG_TOKEN=$(tr -d '[:space:]' < "$CONFIG_TOKEN_FILE")
-if [ -z "$CONFIG_TOKEN" ]; then
-  echo "ERROR: config token is empty"
-  exit 1
-fi
-
-PAYLOAD=$(printf '{"origin":"%s"}' "$URL")
-RESULT=$(curl -fsS --max-time 20 -X POST \
-  -H "Authorization: Bearer $CONFIG_TOKEN" \
-  -H 'Content-Type: application/json' \
-  "$PROXY_URL/config" \
-  -d "$PAYLOAD" || true)
-
-case "$RESULT" in
-  *'"ok":true'*) ;;
-  *)
-    echo "ERROR: failed to update stable config proxy"
-    echo "$RESULT"
-    exit 1
-    ;;
-esac
+git -C "$REPO_DIR" add vidaa-backend-url.json
+git -C "$REPO_DIR" diff --cached --quiet && echo "GitHub config already up to date" || {
+  git -C "$REPO_DIR" commit -m "Update VIDAA tunnel URL"
+  git -C "$REPO_DIR" push origin main
+}
 
 echo
 echo "========================================"
 echo "TUNNEL: $URL"
-echo "PROXY:  $PROXY_URL"
-echo "CONFIG: UPDATED"
+echo "GITHUB: UPDATED"
 echo "========================================"
 printf '%s\n' "$URL" > "$HOME/vidaa-backend-url.txt"
