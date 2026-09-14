@@ -6,13 +6,13 @@ SERVER="$SCRIPT_DIR/server.py"
 REPO_DIR="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
 CONFIG_FILE="$REPO_DIR/vidaa-backend-url.json"
 TUNNEL_BRANCH="vidaa-tunnel"
+CONFIG_URL="https://raw.githubusercontent.com/accesstopm-wq/Vibecode/$TUNNEL_BRANCH/vidaa-backend-url.json"
 
 if [ ! -f "$SERVER" ]; then
   echo "ERROR: server.py not found: $SERVER"
   exit 1
 fi
 
-# Keep the local main branch exactly in sync with GitHub.
 git -C "$REPO_DIR" switch main >/dev/null 2>&1 || true
 git -C "$REPO_DIR" fetch origin main
 if ! git -C "$REPO_DIR" reset --hard origin/main; then
@@ -60,17 +60,35 @@ esac
 printf '{"apiBase":"%s"}\n' "$URL" > "$CONFIG_FILE"
 
 git -C "$REPO_DIR" add vidaa-backend-url.json
-git -C "$REPO_DIR" diff --cached --quiet && echo "GitHub tunnel config already up to date" || {
-  git -C "$REPO_DIR" commit -m "Update VIDAA tunnel URL"
-  git -C "$REPO_DIR" push origin "$TUNNEL_BRANCH"
-}
+if ! git -C "$REPO_DIR" diff --cached --quiet; then
+  if ! git -C "$REPO_DIR" commit -m "Update VIDAA tunnel URL"; then
+    echo "ERROR: git commit failed"
+    git -C "$REPO_DIR" switch main >/dev/null 2>&1 || true
+    exit 1
+  fi
+  if ! git -C "$REPO_DIR" push origin "$TUNNEL_BRANCH"; then
+    echo "ERROR: git push failed"
+    git -C "$REPO_DIR" switch main >/dev/null 2>&1 || true
+    exit 1
+  fi
+fi
 
 git -C "$REPO_DIR" switch main
+
+echo "Checking GitHub config..."
+REMOTE_CONFIG=$(curl -fsS --max-time 15 "$CONFIG_URL?ts=$(date +%s%N)" || true)
+EXPECTED=$(printf '{"apiBase":"%s"}' "$URL")
+if [ "$REMOTE_CONFIG" != "$EXPECTED" ]; then
+  echo "ERROR: GitHub config does not contain the new tunnel URL"
+  echo "Expected: $EXPECTED"
+  echo "Received: $REMOTE_CONFIG"
+  exit 1
+fi
 
 echo
 echo "========================================"
 echo "TUNNEL: $URL"
-echo "GITHUB: UPDATED ON $TUNNEL_BRANCH"
+echo "GITHUB: VERIFIED ON $TUNNEL_BRANCH"
 echo "PAGES: NOT TRIGGERED"
 echo "========================================"
 printf '%s\n' "$URL" > "$HOME/vidaa-backend-url.txt"
