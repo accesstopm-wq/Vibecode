@@ -5,6 +5,7 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 SERVER="$SCRIPT_DIR/server.py"
 REPO_DIR="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
 CONFIG_FILE="$REPO_DIR/vidaa-backend-url.json"
+TUNNEL_BRANCH="vidaa-tunnel"
 
 if [ ! -f "$SERVER" ]; then
   echo "ERROR: server.py not found: $SERVER"
@@ -44,17 +45,22 @@ case "$HEALTH" in
   *) echo "ERROR: backend did not start"; tail -30 "$HOME/server.log"; exit 1;;
 esac
 
+git -C "$REPO_DIR" fetch origin "$TUNNEL_BRANCH"
+git -C "$REPO_DIR" switch -C "$TUNNEL_BRANCH" "origin/$TUNNEL_BRANCH"
 printf '{"apiBase":"%s"}\n' "$URL" > "$CONFIG_FILE"
 
 git -C "$REPO_DIR" add vidaa-backend-url.json
-git -C "$REPO_DIR" diff --cached --quiet && echo "GitHub config already up to date" || {
+git -C "$REPO_DIR" diff --cached --quiet && echo "GitHub tunnel config already up to date" || {
   git -C "$REPO_DIR" commit -m "Update VIDAA tunnel URL"
-  git -C "$REPO_DIR" push origin main
+  git -C "$REPO_DIR" push origin "$TUNNEL_BRANCH"
 }
+
+git -C "$REPO_DIR" switch main
 
 echo
 echo "========================================"
 echo "TUNNEL: $URL"
-echo "GITHUB: UPDATED"
+echo "GITHUB: UPDATED ON $TUNNEL_BRANCH"
+echo "PAGES: NOT TRIGGERED"
 echo "========================================"
 printf '%s\n' "$URL" > "$HOME/vidaa-backend-url.txt"
