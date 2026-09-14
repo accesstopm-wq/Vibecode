@@ -38,7 +38,7 @@ function setStatus(s){statusEl.innerHTML=s;statusEl.className='status';}
 function hideStatus(){statusEl.className='status hide';}
 function fail(s){loading=false;errorEl.innerHTML=s;errorEl.className='error';statusEl.className='status hide';}
 function requestJson(url,ok,bad){var x=new XMLHttpRequest();x.open('GET',url,true);x.onreadystatechange=function(){if(x.readyState!==4)return;if(x.status>=200&&x.status<300){try{ok(JSON.parse(x.responseText));}catch(e){bad(new Error('Invalid JSON'));}}else{var e=new Error('HTTP '+x.status);e.status=x.status;bad(e);}};x.onerror=function(){bad(new Error('Network error'));};x.onabort=function(){};x.send();return x;}
-function loadConfig(){requestJson('https://raw.githubusercontent.com/accesstopm-wq/Vibecode/main/vidaa-backend-url.json?ts='+Date.now(),function(c){apiBase=(c&&c.apiBase)||c&&c.url||'';if(!apiBase){fail('Backend URL is missing.');return;}openStream(0,true,null);},function(){fail('Cannot load backend configuration.');});}
+function loadConfig(){requestJson('https://raw.githubusercontent.com/accesstopm-wq/Vibecode/vidaa-tunnel/vidaa-backend-url.json?ts='+Date.now(),function(c){apiBase=(c&&c.apiBase)||c&&c.url||'';if(!apiBase){fail('Backend URL is missing.');return;}openStream(0,true,null);},function(){fail('Cannot load backend configuration.');});}
 function destroyHls(){if(HLS){try{HLS.destroy();}catch(e){}HLS=null;}hlsStarted=false;}
 function cancelCurrentLoad(){seekSerial++;if(currentXHR){try{currentXHR.abort();}catch(e){}currentXHR=null;}destroyHls();loading=false;}
 function playAfterBuffer(){if(!resumeAfterSeek)return;resumeAfterSeek=false;var p=video.play();if(p&&p.catch)p.catch(function(){});showOverlay();}
