@@ -3,14 +3,16 @@ set -u
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 SERVER="$SCRIPT_DIR/server.py"
-TOKEN_FILE="/storage/emulated/0/Documents/.token.txt"
-OWNER="accesstopm-wq"
-REPO="Vibecode"
-FILE="youtube-player/backend-url.json"
-BRANCH="main"
+CONFIG_TOKEN_FILE="/storage/emulated/0/Documents/.vidaa-config-token.txt"
+PROXY_CONFIG_URL="https://raw.githubusercontent.com/accesstopm-wq/Vibecode/main/youtube-player/backend-url.json"
 
 if [ ! -f "$SERVER" ]; then
   echo "ERROR: server.py not found: $SERVER"
+  exit 1
+fi
+
+if [ ! -f "$CONFIG_TOKEN_FILE" ]; then
+  echo "ERROR: config token missing: $CONFIG_TOKEN_FILE"
   exit 1
 fi
 
@@ -47,43 +49,38 @@ case "$HEALTH" in
   *) echo "ERROR: backend did not start"; tail -30 "$HOME/server.log"; exit 1;;
 esac
 
-GH_TOKEN=$(tr -d '[:space:]' < "$TOKEN_FILE" 2>/dev/null || true)
-if [ -z "$GH_TOKEN" ]; then
-  echo "ERROR: GitHub token missing: $TOKEN_FILE"
+PROXY_URL=$(curl -fsS --max-time 10 "${PROXY_CONFIG_URL}?ts=$(date +%s)" | python -c 'import sys,json; print(json.load(sys.stdin).get("apiBase",""))' 2>/dev/null || true)
+if [ -z "$PROXY_URL" ]; then
+  echo "ERROR: stable config proxy URL not found"
   exit 1
 fi
 
-RESPONSE=$(curl -s --max-time 20 \
-  -H "Authorization: Bearer $GH_TOKEN" \
-  -H "Accept: application/vnd.github+json" \
-  "https://api.github.com/repos/$OWNER/$REPO/contents/$FILE?ref=$BRANCH")
-
-SHA=$(printf '%s' "$RESPONSE" | python -c 'import sys,json; print(json.load(sys.stdin).get("sha",""))' 2>/dev/null || true)
-if [ -z "$SHA" ]; then
-  echo "ERROR: could not read GitHub file SHA"
-  echo "$RESPONSE"
+CONFIG_TOKEN=$(tr -d '[:space:]' < "$CONFIG_TOKEN_FILE")
+if [ -z "$CONFIG_TOKEN" ]; then
+  echo "ERROR: config token is empty"
   exit 1
 fi
 
-CONTENT=$(printf '{"apiBase":"%s"}\n' "$URL" | base64 | tr -d '\n')
-RESULT=$(curl -s --max-time 30 -X PUT \
-  -H "Authorization: Bearer $GH_TOKEN" \
-  -H "Accept: application/vnd.github+json" \
-  -H "X-GitHub-Api-Version: 2022-11-28" \
-  "https://api.github.com/repos/$OWNER/$REPO/contents/$FILE" \
-  -d "{\"message\":\"Update YouTube backend URL\",\"content\":\"$CONTENT\",\"sha\":\"$SHA\",\"branch\":\"$BRANCH\"}")
+PAYLOAD=$(printf '{"origin":"%s"}' "$URL")
+RESULT=$(curl -fsS --max-time 20 -X POST \
+  -H "Authorization: Bearer $CONFIG_TOKEN" \
+  -H 'Content-Type: application/json' \
+  "$PROXY_URL/config" \
+  -d "$PAYLOAD" || true)
 
-COMMIT=$(printf '%s' "$RESULT" | python -c 'import sys,json; print(json.load(sys.stdin).get("commit",{}).get("sha",""))' 2>/dev/null || true)
-if [ -z "$COMMIT" ]; then
-  echo "ERROR: GitHub update failed"
-  echo "$RESULT"
-  exit 1
-fi
+case "$RESULT" in
+  *'"ok":true'*) ;;
+  *)
+    echo "ERROR: failed to update stable config proxy"
+    echo "$RESULT"
+    exit 1
+    ;;
+esac
 
 echo
 echo "========================================"
-echo "BACKEND: $URL"
-echo "GITHUB:  UPDATED"
-echo "COMMIT:  $COMMIT"
+echo "TUNNEL: $URL"
+echo "PROXY:  $PROXY_URL"
+echo "CONFIG: UPDATED"
 echo "========================================"
 printf '%s\n' "$URL" > "$HOME/vidaa-backend-url.txt"
