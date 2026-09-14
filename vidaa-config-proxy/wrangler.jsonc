@@ -9,8 +9,5 @@
       "binding": "TUNNEL",
       "id": "REPLACED_BY_DEPLOY_WORKFLOW"
     }
-  ],
-  "secrets": {
-    "required": ["UPDATE_TOKEN"]
-  }
+  ]
 }
