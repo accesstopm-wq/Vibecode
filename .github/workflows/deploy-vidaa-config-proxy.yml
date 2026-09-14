@@ -22,6 +22,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           sparse-checkout: vidaa-config-proxy
+          fetch-depth: 1
 
       - name: Install Wrangler
         run: npm install --no-save wrangler@latest
@@ -55,21 +56,15 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          VIDAA_CONFIG_TOKEN: ${{ secrets.VIDAA_CONFIG_TOKEN }}
         run: |
           set -euo pipefail
-          npx wrangler deploy --config wrangler.jsonc 2>&1 | tee /tmp/deploy.log
+          printf '{"UPDATE_TOKEN":"%s"}\n' "$VIDAA_CONFIG_TOKEN" > /tmp/worker-secrets.json
+          npx wrangler deploy --config wrangler.jsonc --secrets-file /tmp/worker-secrets.json 2>&1 | tee /tmp/deploy.log
+          rm -f /tmp/worker-secrets.json
           WORKER_URL=$(grep -Eo 'https://[A-Za-z0-9.-]+\.workers\.dev' /tmp/deploy.log | tail -1)
           test -n "$WORKER_URL"
           echo "WORKER_URL=$WORKER_URL" >> "$GITHUB_ENV"
-
-      - name: Set Worker update secret
-        working-directory: vidaa-config-proxy
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          VIDAA_CONFIG_TOKEN: ${{ secrets.VIDAA_CONFIG_TOKEN }}
-        run: |
-          printf '%s' "$VIDAA_CONFIG_TOKEN" | npx wrangler secret put UPDATE_TOKEN --config wrangler.jsonc
 
       - name: Update Pages config to stable proxy URL
         env:
