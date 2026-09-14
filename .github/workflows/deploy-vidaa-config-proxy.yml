@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
   group: vidaa-config-proxy
@@ -81,3 +82,8 @@ jobs:
             -H 'Accept: application/vnd.github+json' \
             -H 'X-GitHub-Api-Version: 2022-11-28' \
             -d "$(jq -n --arg message 'Point VIDAA player at stable config proxy' --arg content "$CONTENT" --arg sha "$SHA" '{message:$message,content:$content,sha:$sha,branch:"main"}')"
+
+      - name: Redeploy Pages once with new proxy URL
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run deploy-vidaa-test.yml --repo "$GITHUB_REPOSITORY" --ref main
