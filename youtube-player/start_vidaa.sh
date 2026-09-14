@@ -6,7 +6,7 @@ SERVER="$SCRIPT_DIR/server.py"
 REPO_DIR="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
 CONFIG_FILE="$REPO_DIR/vidaa-backend-url.json"
 TUNNEL_BRANCH="vidaa-tunnel"
-CONFIG_URL="https://raw.githubusercontent.com/accesstopm-wq/Vibecode/$TUNNEL_BRANCH/vidaa-backend-url.json"
+CONFIG_URL="https://api.github.com/repos/accesstopm-wq/Vibecode/contents/vidaa-backend-url.json?ref=$TUNNEL_BRANCH"
 
 if [ ! -f "$SERVER" ]; then
   echo "ERROR: server.py not found: $SERVER"
@@ -76,7 +76,9 @@ fi
 git -C "$REPO_DIR" switch main
 
 echo "Checking GitHub config..."
-REMOTE_CONFIG=$(curl -fsS --max-time 15 "$CONFIG_URL?ts=$(date +%s%N)" || true)
+REMOTE_JSON=$(curl -fsS --max-time 15 "$CONFIG_URL&ts=$(date +%s%N)" || true)
+REMOTE_CONFIG=$(printf '%s' "$REMOTE_JSON" | python -c 'import sys,json,base64; d=json.load(sys.stdin); print(base64.b64decode(d["content"]).decode().strip(), end="")' 2>/dev/null || true)
+echo "GITHUB API: $REMOTE_CONFIG"
 EXPECTED=$(printf '{"apiBase":"%s"}' "$URL")
 if [ "$REMOTE_CONFIG" != "$EXPECTED" ]; then
   echo "ERROR: GitHub config does not contain the new tunnel URL"
