@@ -8,18 +8,18 @@ BITRATE="${BITRATE:-6M}"
 FPS="${FPS:-30}"
 HLS_TIME="${HLS_TIME:-2}"
 
-FIFO="$BASE/.capture.mkv"
+CAPTURE="$BASE/.capture.mkv"
 WEB="$BASE/www"
 HLS="$WEB/live"
 
 mkdir -p "$WEB" "$HLS"
-rm -f "$FIFO"
-mkfifo "$FIFO"
+rm -f "$CAPTURE"
+touch "$CAPTURE"
 
 cleanup() {
   trap - EXIT INT TERM
   jobs -pr | xargs -r kill 2>/dev/null || true
-  rm -f "$FIFO"
+  rm -f "$CAPTURE"
 }
 trap cleanup EXIT INT TERM
 
@@ -85,7 +85,7 @@ rm -f "$HLS"/*
 
 # ffmpeg consumes the live Matroska stream produced by scrcpy.
 # Video stays H.264; audio is converted to AAC for broad TV/browser support.
-ffmpeg -hide_banner -loglevel warning   -fflags +genpts   -i "$FIFO"   -map 0:v:0 -map 0:a:0?   -c:v copy   -c:a aac -b:a 128k -ac 2   -f hls   -hls_time "$HLS_TIME"   -hls_list_size 5   -hls_flags delete_segments+append_list+independent_segments   -hls_segment_type mpegts   "$HLS/index.m3u8" &
+tail -c +1 -f "$CAPTURE" | ffmpeg -hide_banner -loglevel warning -fflags +genpts -i pipe:0   -map 0:v:0 -map 0:a:0?   -c:v copy   -c:a aac -b:a 128k -ac 2   -f hls   -hls_time "$HLS_TIME"   -hls_list_size 5   -hls_flags delete_segments+append_list+independent_segments   -hls_segment_type mpegts   "$HLS/index.m3u8" &
 FFPID=$!
 
 (
@@ -109,5 +109,4 @@ PYFPID=$!
 # Capture both display and system playback audio.
 # --turn-screen-off keeps mirroring alive while the physical screen is off.
 # --stay-awake prevents normal sleep while the stream is running.
-exec 3>"$FIFO"
-scrcpy   --no-window   --no-playback     --turn-screen-off   --stay-awake   --require-audio   --video-codec=h264   --audio-codec=aac   --max-size="$WIDTH"   --video-bit-rate="$BITRATE"   --max-fps="$FPS"   --record="$FIFO"   --record-format=mkv
+scrcpy   --no-window   --no-playback     --turn-screen-off   --stay-awake   --require-audio   --video-codec=h264   --audio-codec=aac   --max-size="$WIDTH"   --video-bit-rate="$BITRATE"   --max-fps="$FPS"   --record="$CAPTURE"   --record-format=mkv
