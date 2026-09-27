@@ -110,4 +110,4 @@ PYFPID=$!
 # --turn-screen-off keeps mirroring alive while the physical screen is off.
 # --stay-awake prevents normal sleep while the stream is running.
 exec 3>"$FIFO"
-scrcpy   --no-playback     --turn-screen-off   --stay-awake   --require-audio   --video-codec=h264   --audio-codec=aac   --max-size="$WIDTH"   --video-bit-rate="$BITRATE"   --max-fps="$FPS"   --record="$FIFO"   --record-format=mkv
+scrcpy   --no-window   --no-playback     --turn-screen-off   --stay-awake   --require-audio   --video-codec=h264   --audio-codec=aac   --max-size="$WIDTH"   --video-bit-rate="$BITRATE"   --max-fps="$FPS"   --record="$FIFO"   --record-format=mkv
