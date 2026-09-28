@@ -22,7 +22,7 @@ import java.util.concurrent.*;
 
 public class StreamService extends Service {
     static final int PORT=8787, W=1280, H=720, FPS=30, VBIT=4000000;
-    MediaProjection projection; VirtualDisplay display; MediaCodec video; Surface surface;
+    MediaProjection projection; MediaProjection.Callback projectionCallback; VirtualDisplay display; MediaCodec video; Surface surface;
     AudioRecord audio; volatile boolean running; Server server; ExecutorService pool=Executors.newCachedThreadPool();
     PowerManager.WakeLock wake;
 
@@ -50,6 +50,13 @@ public class StreamService extends Service {
             MediaProjectionManager pm=(MediaProjectionManager)getSystemService(MEDIA_PROJECTION_SERVICE);
             projection=pm.getMediaProjection(result,data);
             if(projection==null) throw new Exception("MediaProjection unavailable");
+            projectionCallback = new MediaProjection.Callback() {
+                @Override public void onStop() {
+                    status("Screen capture stopped by Android.");
+                    stopSelf();
+                }
+            };
+            projection.registerCallback(projectionCallback, new Handler(Looper.getMainLooper()));
 
             status("Setting up video encoder...");
             PowerManager p=(PowerManager)getSystemService(POWER_SERVICE);
@@ -163,6 +170,7 @@ public class StreamService extends Service {
         try{if(display!=null)display.release();}catch(Exception ignored){}
         try{if(surface!=null)surface.release();}catch(Exception ignored){}
         try{if(video!=null){video.stop();video.release();}}catch(Exception ignored){}
+        try{if(projection!=null && projectionCallback!=null)projection.unregisterCallback(projectionCallback);}catch(Exception ignored){}
         try{if(projection!=null)projection.stop();}catch(Exception ignored){}
         try{if(server!=null)server.close();}catch(Exception ignored){}
         try{if(wake!=null&&wake.isHeld())wake.release();}catch(Exception ignored){}
