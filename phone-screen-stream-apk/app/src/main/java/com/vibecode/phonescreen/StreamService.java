@@ -26,8 +26,11 @@ public class StreamService extends Service {
     AudioRecord audio; volatile boolean running; Server server; ExecutorService pool=Executors.newCachedThreadPool();
     PowerManager.WakeLock wake;
 
+    void status(String s) { getSharedPreferences("stream",0).edit().putString("status",s).apply(); }
+
     @Override public void onCreate() {
         super.onCreate();
+        status("Service created");
         NotificationChannel c=new NotificationChannel("stream","Screen Stream",NotificationManager.IMPORTANCE_LOW);
         ((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).createNotificationChannel(c);
     }
@@ -35,29 +38,35 @@ public class StreamService extends Service {
     @Override public int onStartCommand(Intent intent,int flags,int id) {
         if(running) return START_STICKY;
         try {
+            status("Starting foreground service...");
             Notification n=new Notification.Builder(this,"stream").setContentTitle("Phone Screen Stream")
                     .setContentText("Streaming screen to local Wi-Fi").setSmallIcon(android.R.drawable.ic_media_play).build();
             if(Build.VERSION.SDK_INT>=29) startForeground(1,n,ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION);
             else startForeground(1,n);
 
+            status("Getting screen capture...");
             int result=intent.getIntExtra("resultCode",Activity.RESULT_CANCELED);
             Intent data=intent.getParcelableExtra("data");
             MediaProjectionManager pm=(MediaProjectionManager)getSystemService(MEDIA_PROJECTION_SERVICE);
             projection=pm.getMediaProjection(result,data);
             if(projection==null) throw new Exception("MediaProjection unavailable");
 
+            status("Setting up video encoder...");
             PowerManager p=(PowerManager)getSystemService(POWER_SERVICE);
             wake=p.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,"PhoneScreenStream:keep");
             wake.acquire();
 
             setupVideo();
+            status("Setting up system audio...");
             setupAudio();
             running=true;
+            status("Starting local server...");
             server=new Server();
             pool.execute(server);
             pool.execute(this::videoLoop);
             pool.execute(this::audioLoop);
-        } catch(Exception e) { e.printStackTrace(); stopSelf(); }
+            status("STREAM READY: http://"+server.ip()+":"+PORT+"/");
+        } catch(Exception e) { status("ERROR: "+e.getClass().getSimpleName()+": "+String.valueOf(e.getMessage())); e.printStackTrace(); stopSelf(); }
         return START_NOT_STICKY;
     }
 
@@ -140,6 +149,7 @@ public class StreamService extends Service {
 
     @Override public void onDestroy() {
         running=false;
+        status("Stopped");
         try{if(audio!=null){audio.stop();audio.release();}}catch(Exception ignored){}
         try{if(display!=null)display.release();}catch(Exception ignored){}
         try{if(surface!=null)surface.release();}catch(Exception ignored){}
