@@ -1,0 +1,5 @@
+plugins { id 'com.android.application' }
+
+android { namespace 'com.vibecode.phonescreen'; compileSdk 35
+    defaultConfig { applicationId 'com.vibecode.phonescreen'; minSdk 29; targetSdk 35; versionCode 1; versionName '1.0' }
+}
