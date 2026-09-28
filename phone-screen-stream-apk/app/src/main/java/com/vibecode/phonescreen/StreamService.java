@@ -158,7 +158,7 @@ public class StreamService extends Service {
     }
 
     void audioLoop() {
-        byte[] buf=new byte[38400];
+        byte[] buf=new byte[7680];
         try {
             audio.startRecording();
             long start=System.nanoTime()/1000;
@@ -229,10 +229,10 @@ public class StreamService extends Service {
         }
         byte[] frame(byte[] p){ByteArrayOutputStream o=new ByteArrayOutputStream(p.length+16);o.write(0x82);int n=p.length;if(n<126)o.write(n);else if(n<=65535){o.write(126);o.write((n>>>8)&255);o.write(n&255);}else{o.write(127);for(int i=7;i>=0;i--)o.write((n>>>(8*i))&255);}try{o.write(p);}catch(Exception ignored){}return o.toByteArray();}
         String page(){return "<!doctype html><meta name=viewport content='width=device-width,initial-scale=1'><style>html,body{margin:0;background:#000;color:#fff;height:100%;overflow:hidden}#v{width:100%;height:100%;object-fit:contain}#s{position:fixed;top:0;left:0;background:#000c;padding:8px;font:14px sans-serif}</style><img id=v src='/mjpeg'><div id=s>Connecting…</div><script>"+
-                "const s=document.querySelector('#s'),v=document.querySelector('#v');let ac,last=0,audioPackets=0;"+
+                "const s=document.querySelector('#s'),v=document.querySelector('#v');let ac,audioNode,audioCtxStarted=false,audioPackets=0,audioQ=[],audioSamples=0;"+
                 "function start(){let w=new WebSocket('ws://'+location.host+'/ws');w.binaryType='arraybuffer';w.onopen=()=>s.textContent='Video connected';w.onclose=()=>s.textContent='Audio disconnected';w.onmessage=e=>{let b=new Uint8Array(e.data),d=new DataView(e.data),t=b[0],ts=Number(d.getBigInt64(1)),n=d.getUint32(9),p=b.slice(13,13+n);if(t===4)audio(p,ts)};}"+
-                "function audio(p,ts){audioPackets++;try{if(!ac)ac=new AudioContext();let a=new Int16Array(p.buffer,p.byteOffset,p.byteLength/2),buf=ac.createBuffer(2,a.length/2,48000);for(let ch=0;ch<2;ch++){let q=buf.getChannelData(ch);for(let i=0;i<q.length;i++)q[i]=a[i*2+ch]/32768;}let z=ac.createBufferSource();z.buffer=buf;z.connect(ac.destination);let t=Math.max(ac.currentTime,last+.01);z.start(t);last=t+buf.duration;s.textContent='VIDEO OK | audio packets: '+audioPackets;}catch(e){s.textContent='AUDIO ERROR: '+e.message;}}"+
-                "v.onload=()=>s.textContent='VIDEO OK';v.onerror=()=>s.textContent='VIDEO ERROR';start();document.body.addEventListener('click',()=>{if(ac)ac.resume();});</script>";}
+                "function audio(p,ts){audioPackets++;try{if(!ac){ac=new AudioContext({sampleRate:48000});audioNode=ac.createScriptProcessor(4096,2,2);audioNode.onaudioprocess=e=>{let o=e.outputBuffer;for(let ch=0;ch<2;ch++){let q=o.getChannelData(ch);for(let i=0;i<q.length;i++){let v=audioQ.length?audioQ.shift():0;q[i]=v;}}};audioNode.connect(ac.destination);}let a=new Int16Array(p.buffer,p.byteOffset,p.byteLength/2);for(let i=0;i<a.length;i++)audioQ.push(a[i]/32768);audioSamples+=a.length/2;if(audioQ.length>48000){audioQ.splice(0,audioQ.length-48000);}s.textContent='VIDEO OK | audio: '+audioPackets+' | buffer: '+Math.round(audioQ.length/96)+'ms';}catch(e){s.textContent='AUDIO ERROR: '+e.message;}}"+
+                "v.onload=()=>s.textContent='VIDEO OK';v.onerror=()=>s.textContent='VIDEO ERROR';start();document.body.addEventListener('click',()=>{if(ac){ac.resume();audioQ=[];s.textContent='VIDEO OK | audio live';}});</script>";}
 
 
         String ip(){try{Enumeration<NetworkInterface> es=NetworkInterface.getNetworkInterfaces();while(es.hasMoreElements()){NetworkInterface ni=es.nextElement();for(InterfaceAddress ia:ni.getInterfaceAddresses()){InetAddress a=ia.getAddress();if(a instanceof Inet4Address&&!a.isLoopbackAddress())return a.getHostAddress();}}}catch(Exception ignored){}return "PHONE_IP";}
