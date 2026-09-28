@@ -199,24 +199,24 @@ public class StreamService extends Service {
                 String line, key=null, path="/"; line=r.readLine(); if(line!=null){String[] q=line.split(" ");if(q.length>1)path=q[1];}
                 while((line=r.readLine())!=null&&!line.isEmpty()) if(line.toLowerCase().startsWith("sec-websocket-key:")) key=line.substring(line.indexOf(':')+1).trim();
                 if("/ws".equals(path)&&key!=null){
-                    String accept=Base64.getEncoder().encodeToString(MessageDigest.getInstance("SHA-1").digest((key+"258EAFA5-E914-47DA-95CA-C5AB0DC85B11").getBytes("ISO-8859-1")));
-                    OutputStream out=s.getOutputStream(); out.write(("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: "+accept+"\r\n\r\n").getBytes("ISO-8859-1"));out.flush();
+                    String accept=Base64.getEncoder().encodeToString(MessageDigest.getInstance("SHA-1").digest((key+"258EAFA5-E914-47DA-95CA-C5AB0DC85B11").getBytes(java.nio.charset.StandardCharsets.ISO_8859_1)));
+                    OutputStream out=s.getOutputStream(); out.write(("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: "+accept+"\r\n\r\n").getBytes(java.nio.charset.StandardCharsets.ISO_8859_1));out.flush();
                     clients.add(s);
                     try{while(r.readLine()!=null){} }finally{clients.remove(s);s.close();}
                 } else if("/mjpeg".equals(path)) {
                     OutputStream out=s.getOutputStream();
-                    out.write(("HTTP/1.1 200 OK\r\nContent-Type: multipart/x-mixed-replace; boundary=frame\r\nCache-Control: no-cache, no-store, must-revalidate\r\nPragma: no-cache\r\nConnection: close\r\n\r\n").getBytes("ISO-8859-1")); out.flush();
+                    out.write(("HTTP/1.1 200 OK\r\nContent-Type: multipart/x-mixed-replace; boundary=frame\r\nCache-Control: no-cache, no-store, must-revalidate\r\nPragma: no-cache\r\nConnection: close\r\n\r\n").getBytes(java.nio.charset.StandardCharsets.ISO_8859_1)); out.flush();
                     mjpegClients.add(s);
                     try{while(r.readLine()!=null){} }finally{mjpegClients.remove(s);s.close();}
                 } else {
                     String html=page(); byte[] body=html.getBytes("UTF-8");
-                    OutputStream out=s.getOutputStream();out.write(("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: "+body.length+"\r\nConnection: close\r\n\r\n").getBytes("ISO-8859-1"));out.write(body);out.flush();s.close();
+                    OutputStream out=s.getOutputStream();out.write(("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: "+body.length+"\r\nConnection: close\r\n\r\n").getBytes(java.nio.charset.StandardCharsets.ISO_8859_1));out.write(body);out.flush();s.close();
                 }
             }catch(Exception e){try{s.close();}catch(Exception ignored){}}
         }
         synchronized void broadcastJpeg(byte[] jpg){
             byte[] head=("--frame\r\nContent-Type: image/jpeg\r\nContent-Length: "+jpg.length+"\r\n\r\n").getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
-            byte[] tail="\r\n".getBytes("ISO-8859-1");
+            byte[] tail="\r\n".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
             for(Socket s:mjpegClients)try{OutputStream o=s.getOutputStream();o.write(head);o.write(jpg);o.write(tail);o.flush();}catch(Exception e){mjpegClients.remove(s);try{s.close();}catch(Exception ignored){}}
         }
         synchronized void broadcast(int type,long ts,byte[] data){
