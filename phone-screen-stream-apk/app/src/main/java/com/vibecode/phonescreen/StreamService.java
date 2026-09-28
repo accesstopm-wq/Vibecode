@@ -66,7 +66,7 @@ public class StreamService extends Service {
             pool.execute(this::videoLoop);
             pool.execute(this::audioLoop);
             status("STREAM READY: http://"+server.ip()+":"+PORT+"/");
-        } catch(Exception e) { status("ERROR: "+e.getClass().getSimpleName()+": "+String.valueOf(e.getMessage())); e.printStackTrace(); stopSelf(); }
+        } catch(Throwable e) { status("ERROR: "+e.getClass().getName()+": "+String.valueOf(e.getMessage())); e.printStackTrace(); stopSelf(); }
         return START_NOT_STICKY;
     }
 
@@ -149,7 +149,6 @@ public class StreamService extends Service {
 
     @Override public void onDestroy() {
         running=false;
-        status("Stopped");
         try{if(audio!=null){audio.stop();audio.release();}}catch(Exception ignored){}
         try{if(display!=null)display.release();}catch(Exception ignored){}
         try{if(surface!=null)surface.release();}catch(Exception ignored){}
