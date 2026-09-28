@@ -1,6 +1,7 @@
 package com.vibecode.phonescreen;
 
 import android.app.*;
+import android.app.ServiceInfo;
 import android.content.*;
 import android.graphics.SurfaceTexture;
 import android.hardware.display.DisplayManager;
@@ -10,6 +11,7 @@ import android.media.projection.MediaProjection;
 import android.media.projection.MediaProjectionManager;
 import android.net.wifi.WifiManager;
 import android.os.*;
+import android.util.DisplayMetrics;
 import android.view.Surface;
 import java.io.*;
 import java.net.*;
