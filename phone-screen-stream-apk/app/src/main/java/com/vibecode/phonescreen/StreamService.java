@@ -66,7 +66,17 @@ public class StreamService extends Service {
             pool.execute(this::videoLoop);
             pool.execute(this::audioLoop);
             status("STREAM READY: http://"+server.ip()+":"+PORT+"/");
-        } catch(Throwable e) { status("ERROR: "+e.getClass().getName()+": "+String.valueOf(e.getMessage())); e.printStackTrace(); stopSelf(); }
+        } catch(Throwable e) {
+            String msg="ERROR: "+e.getClass().getName()+": "+String.valueOf(e.getMessage());
+            status(msg);
+            try {
+                Notification n=new Notification.Builder(this,"stream").setContentTitle("Phone Screen Stream - ERROR")
+                        .setContentText(msg.length()>120?msg.substring(0,120):msg).setSmallIcon(android.R.drawable.ic_dialog_alert).build();
+                ((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).notify(2,n);
+            } catch(Throwable ignored) {}
+            e.printStackTrace();
+            stopSelf();
+        }
         return START_NOT_STICKY;
     }
 
