@@ -1,7 +1,7 @@
 package com.vibecode.phonescreen;
 
 import android.app.*;
-import android.app.ServiceInfo;
+import android.content.pm.ServiceInfo;
 import android.content.*;
 import android.graphics.SurfaceTexture;
 import android.hardware.display.DisplayManager;
