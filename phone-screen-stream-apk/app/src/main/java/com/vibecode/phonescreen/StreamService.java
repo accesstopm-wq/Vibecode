@@ -215,7 +215,7 @@ public class StreamService extends Service {
             }catch(Exception e){try{s.close();}catch(Exception ignored){}}
         }
         synchronized void broadcastJpeg(byte[] jpg){
-            byte[] head=("--frame\r\nContent-Type: image/jpeg\r\nContent-Length: "+jpg.length+"\r\n\r\n").getBytes("ISO-8859-1");
+            byte[] head=("--frame\r\nContent-Type: image/jpeg\r\nContent-Length: "+jpg.length+"\r\n\r\n").getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
             byte[] tail="\r\n".getBytes("ISO-8859-1");
             for(Socket s:mjpegClients)try{OutputStream o=s.getOutputStream();o.write(head);o.write(jpg);o.write(tail);o.flush();}catch(Exception e){mjpegClients.remove(s);try{s.close();}catch(Exception ignored){}}
         }
