@@ -25,6 +25,7 @@ import java.util.concurrent.*;
 
 public class StreamService extends Service {
     static final int PORT=8787, W=1280, H=720, FPS=20;
+    long streamStartUs;
     MediaProjection projection; MediaProjection.Callback projectionCallback; VirtualDisplay display; ImageReader imageReader; Surface surface;
     AudioRecord audio; volatile boolean running; Server server; ExecutorService pool=Executors.newCachedThreadPool();
     PowerManager.WakeLock wake;
@@ -99,6 +100,7 @@ public class StreamService extends Service {
     }
 
     void videoLoop() {
+        if(streamStartUs==0) streamStartUs=System.nanoTime()/1000;
         BitmapHolder holder=new BitmapHolder(W,H);
         long next=System.nanoTime();
         while(running) try {
@@ -106,7 +108,7 @@ public class StreamService extends Service {
             if(im!=null) {
                 byte[] jpg=holder.toJpeg(im,70);
                 im.close();
-                if(jpg!=null && server!=null) server.broadcastJpeg(jpg);
+                if(jpg!=null && server!=null) server.broadcastJpeg((System.nanoTime()/1000)-streamStartUs,jpg);
             }
             next+=50_000_000L;
             long wait=next-System.nanoTime();
@@ -161,10 +163,10 @@ public class StreamService extends Service {
         byte[] buf=new byte[7680];
         try {
             audio.startRecording();
-            long start=System.nanoTime()/1000;
+            if(streamStartUs==0) streamStartUs=System.nanoTime()/1000;
             while(running) {
                 int n=audio.read(buf,0,buf.length);
-                if(n>0 && server!=null) server.broadcast(4,(System.nanoTime()/1000)-start,Arrays.copyOf(buf,n));
+                if(n>0 && server!=null) server.broadcast(4,(System.nanoTime()/1000)-streamStartUs,Arrays.copyOf(buf,n));
             }
         } catch(Exception e) { if(running) e.printStackTrace(); }
     }
@@ -185,7 +187,7 @@ public class StreamService extends Service {
     @Override public android.os.IBinder onBind(Intent i){return null;}
 
     class Server implements Runnable {
-        ServerSocket ss; final Set<Socket> clients=ConcurrentHashMap.newKeySet(); final Set<Socket> mjpegClients=ConcurrentHashMap.newKeySet();
+        ServerSocket ss; final Set<Socket> clients=ConcurrentHashMap.newKeySet(); final Set<Socket> videoClients=ConcurrentHashMap.newKeySet();
         public void run(){
             try{
                 ss=new ServerSocket(PORT,20,InetAddress.getByName("0.0.0.0"));
@@ -203,6 +205,7 @@ public class StreamService extends Service {
                     OutputStream out=s.getOutputStream(); out.write(("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: "+accept+"\r\n\r\n").getBytes(java.nio.charset.StandardCharsets.ISO_8859_1));out.flush();
                     clients.add(s);
                     try{while(r.readLine()!=null){} }finally{clients.remove(s);s.close();}
+                } else if("/video".equals(path)&&key!=null) { String accept=Base64.getEncoder().encodeToString(MessageDigest.getInstance("SHA-1").digest((key+"258EAFA5-E914-47DA-95CA-C5AB0DC85B11").getBytes(java.nio.charset.StandardCharsets.ISO_8859_1))); OutputStream out=s.getOutputStream(); out.write(("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: "+accept+"\r\n\r\n").getBytes(java.nio.charset.StandardCharsets.ISO_8859_1));out.flush(); videoClients.add(s); try{while(r.readLine()!=null){}}finally{videoClients.remove(s);s.close();}
                 } else if("/mjpeg".equals(path)) {
                     OutputStream out=s.getOutputStream();
                     out.write(("HTTP/1.1 200 OK\r\nContent-Type: multipart/x-mixed-replace; boundary=frame\r\nCache-Control: no-cache, no-store, must-revalidate\r\nPragma: no-cache\r\nConnection: close\r\n\r\n").getBytes(java.nio.charset.StandardCharsets.ISO_8859_1)); out.flush();
@@ -214,10 +217,9 @@ public class StreamService extends Service {
                 }
             }catch(Exception e){try{s.close();}catch(Exception ignored){}}
         }
-        synchronized void broadcastJpeg(byte[] jpg){
-            byte[] head=("--frame\r\nContent-Type: image/jpeg\r\nContent-Length: "+jpg.length+"\r\n\r\n").getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
-            byte[] tail="\r\n".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
-            for(Socket s:mjpegClients)try{OutputStream o=s.getOutputStream();o.write(head);o.write(jpg);o.write(tail);o.flush();}catch(Exception e){mjpegClients.remove(s);try{s.close();}catch(Exception ignored){}}
+        synchronized void broadcastJpeg(long ts,byte[] jpg){
+            byte[] ws=framePacket(5,ts,jpg);
+            for(Socket s:videoClients)try{OutputStream o=s.getOutputStream();o.write(ws);o.flush();}catch(Exception e){videoClients.remove(s);try{s.close();}catch(Exception ignored){}}
         }
         synchronized void broadcast(int type,long ts,byte[] data){
             byte[] ws=framePacket(type,ts,data);
@@ -236,6 +238,6 @@ public class StreamService extends Service {
 
 
         String ip(){try{Enumeration<NetworkInterface> es=NetworkInterface.getNetworkInterfaces();while(es.hasMoreElements()){NetworkInterface ni=es.nextElement();for(InterfaceAddress ia:ni.getInterfaceAddresses()){InetAddress a=ia.getAddress();if(a instanceof Inet4Address&&!a.isLoopbackAddress())return a.getHostAddress();}}}catch(Exception ignored){}return "PHONE_IP";}
-        void close(){try{if(ss!=null)ss.close();}catch(Exception ignored){}for(Socket s:clients)try{s.close();}catch(Exception ignored){}for(Socket s:mjpegClients)try{s.close();}catch(Exception ignored){}clients.clear();mjpegClients.clear();}
+        void close(){try{if(ss!=null)ss.close();}catch(Exception ignored){}for(Socket s:clients)try{s.close();}catch(Exception ignored){}for(Socket s:videoClients)try{s.close();}catch(Exception ignored){}clients.clear();videoClients.clear();}
     }
 }
