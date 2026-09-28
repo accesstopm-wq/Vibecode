@@ -32,6 +32,13 @@ command -v ffmpeg >/dev/null || {
   echo "ffmpeg is not installed. Run: pkg install ffmpeg"
   exit 1
 }
+echo "=== Diagnostics ==="
+echo "ADB devices:"
+adb devices 2>&1 || true
+echo "Wi-Fi IP:"
+ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src"){print $(i+1); exit}}' || true
+echo "==================="
+
 command -v python >/dev/null || {
   echo "python is not installed. Run: pkg install python"
   exit 1
@@ -87,6 +94,11 @@ rm -f "$HLS"/*
 # Video stays H.264; audio is converted to AAC for broad TV/browser support.
 tail -c +1 -f "$CAPTURE" | ffmpeg -hide_banner -loglevel warning -fflags +genpts -i pipe:0   -map 0:v:0 -map 0:a:0?   -c:v copy   -c:a aac -b:a 128k -ac 2   -f hls   -hls_time "$HLS_TIME"   -hls_list_size 5   -hls_flags delete_segments+append_list+independent_segments   -hls_segment_type mpegts   "$HLS/index.m3u8" &
 FFPID=$!
+sleep 2
+echo "Capture file:"
+ls -lh "$CAPTURE" 2>&1 || true
+echo "FFmpeg PID: $FFPID"
+ps -p "$FFPID" -o pid,cmd 2>/dev/null || true
 
 (
   while [ ! -f "$HLS/index.m3u8" ]; do sleep 0.2; done
