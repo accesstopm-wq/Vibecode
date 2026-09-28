@@ -144,6 +144,31 @@ public class StreamService extends Service {
             return out.toByteArray();
         }
     }
+    void setupAudio() throws Exception {
+        int sr=48000, ch=AudioFormat.CHANNEL_IN_STEREO;
+        AudioFormat fmt=new AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                .setSampleRate(sr).setChannelMask(ch).build();
+        AudioPlaybackCaptureConfiguration cfg=new AudioPlaybackCaptureConfiguration.Builder(projection)
+                .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
+                .addMatchingUsage(AudioAttributes.USAGE_GAME)
+                .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN).build();
+        int min=AudioRecord.getMinBufferSize(sr,ch,AudioFormat.ENCODING_PCM_16BIT);
+        audio=new AudioRecord.Builder().setAudioFormat(fmt).setBufferSizeInBytes(Math.max(min*2,38400))
+                .setAudioPlaybackCaptureConfig(cfg).build();
+    }
+
+    void audioLoop() {
+        byte[] buf=new byte[38400];
+        try {
+            audio.startRecording();
+            long start=System.nanoTime()/1000;
+            while(running) {
+                int n=audio.read(buf,0,buf.length);
+                if(n>0 && server!=null) server.broadcast(4,(System.nanoTime()/1000)-start,Arrays.copyOf(buf,n));
+            }
+        } catch(Exception e) { if(running) e.printStackTrace(); }
+    }
+
     @Override public void onDestroy() {
         running=false;
         try{if(audio!=null){audio.stop();audio.release();}}catch(Exception ignored){}
@@ -156,6 +181,8 @@ public class StreamService extends Service {
         try{if(wake!=null&&wake.isHeld())wake.release();}catch(Exception ignored){}
         pool.shutdownNow(); super.onDestroy();
     }
+
+    @Override public android.os.IBinder onBind(Intent i){return null;}
 
     class Server implements Runnable {
         ServerSocket ss; final Set<Socket> clients=ConcurrentHashMap.newKeySet(); final Set<Socket> mjpegClients=ConcurrentHashMap.newKeySet();
