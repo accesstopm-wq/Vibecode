@@ -207,3 +207,8 @@ public class StreamService extends Service {
                 "function audio(p,ts){audioPackets++;try{if(!ac)ac=new AudioContext();let a=new Int16Array(p.buffer,p.byteOffset,p.byteLength/2),buf=ac.createBuffer(2,a.length/2,48000);for(let ch=0;ch<2;ch++){let q=buf.getChannelData(ch);for(let i=0;i<q.length;i++)q[i]=a[i*2+ch]/32768;}let z=ac.createBufferSource();z.buffer=buf;z.connect(ac.destination);let t=Math.max(ac.currentTime,last+.01);z.start(t);last=t+buf.duration;s.textContent='VIDEO OK | audio packets: '+audioPackets;}catch(e){s.textContent='AUDIO ERROR: '+e.message;}}"+
                 "v.onload=()=>s.textContent='VIDEO OK';v.onerror=()=>s.textContent='VIDEO ERROR';start();document.body.addEventListener('click',()=>{if(ac)ac.resume();});</script>";}
 
+
+        String ip(){try{Enumeration<NetworkInterface> es=NetworkInterface.getNetworkInterfaces();while(es.hasMoreElements()){NetworkInterface ni=es.nextElement();for(InterfaceAddress ia:ni.getInterfaceAddresses()){InetAddress a=ia.getAddress();if(a instanceof Inet4Address&&!a.isLoopbackAddress())return a.getHostAddress();}}}catch(Exception ignored){}return "PHONE_IP";}
+        void close(){try{if(ss!=null)ss.close();}catch(Exception ignored){}for(Socket s:clients)try{s.close();}catch(Exception ignored){}for(Socket s:mjpegClients)try{s.close();}catch(Exception ignored){}clients.clear();mjpegClients.clear();}
+    }
+}
