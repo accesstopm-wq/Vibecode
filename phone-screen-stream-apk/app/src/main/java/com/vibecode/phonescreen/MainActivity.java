@@ -17,6 +17,7 @@ public class MainActivity extends Activity {
     static final int REQ_AUDIO = 101;
     MediaProjectionManager projectionManager;
     TextView status;
+    final Handler handler = new Handler(Looper.getMainLooper());
 
     @Override public void onCreate(Bundle b) {
         super.onCreate(b);
@@ -52,7 +53,10 @@ public class MainActivity extends Activity {
         });
 
         setContentView(box);
+        handler.postDelayed(new Runnable(){ public void run(){ updateStatus(); handler.postDelayed(this,500); }},500);
     }
+
+    void updateStatus() { String s=getSharedPreferences("stream",0).getString("status",""); if(!s.isEmpty() && !s.equals("Service created")) status.setText(s); }
 
     void requestPermissionsAndCapture() {
         if (android.os.Build.VERSION.SDK_INT >= 23 &&
@@ -79,7 +83,7 @@ public class MainActivity extends Activity {
             i.putExtra("resultCode", resultCode);
             i.putExtra("data", data);
             if (android.os.Build.VERSION.SDK_INT >= 26) startForegroundService(i); else startService(i);
-            status.setText("Starting stream...\nKeep this app running once; the foreground notification keeps the stream alive.");
+            status.setText("Starting stream...");
         }
     }
 
