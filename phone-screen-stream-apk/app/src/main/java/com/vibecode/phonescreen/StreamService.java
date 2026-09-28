@@ -187,7 +187,7 @@ public class StreamService extends Service {
     @Override public android.os.IBinder onBind(Intent i){return null;}
 
     class Server implements Runnable {
-        ServerSocket ss; final Set<Socket> clients=ConcurrentHashMap.newKeySet(); final Set<Socket> videoClients=ConcurrentHashMap.newKeySet();
+        ServerSocket ss; final Set<Socket> clients=ConcurrentHashMap.newKeySet(); final Set<Socket> videoClients=ConcurrentHashMap.newKeySet(); final Set<Socket> mjpegClients=ConcurrentHashMap.newKeySet();
         public void run(){
             try{
                 ss=new ServerSocket(PORT,20,InetAddress.getByName("0.0.0.0"));
