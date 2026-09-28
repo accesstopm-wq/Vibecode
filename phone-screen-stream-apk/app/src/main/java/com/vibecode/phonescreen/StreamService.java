@@ -126,7 +126,7 @@ public class StreamService extends Service {
                 MediaFormat f=video.getOutputFormat();
                 byte[] a=getBytes(f,"csd-0"), b=getBytes(f,"csd-1");
                 if(a!=null || b!=null) config=joinAnnex(a,b);
-                if(config!=null) server.broadcast(3,0,config);
+                if(config!=null) { server.videoConfig=config; server.broadcast(3,0,config); }
                 continue;
             }
             if(ix<0) continue;
@@ -180,7 +180,7 @@ public class StreamService extends Service {
     @Override public android.os.IBinder onBind(Intent i){return null;}
 
     class Server implements Runnable {
-        ServerSocket ss; final Set<Socket> clients=ConcurrentHashMap.newKeySet();
+        ServerSocket ss; final Set<Socket> clients=ConcurrentHashMap.newKeySet(); volatile byte[] videoConfig;
         public void run(){
             try{
                 ss=new ServerSocket(PORT,20,InetAddress.getByName("0.0.0.0"));
@@ -196,16 +196,24 @@ public class StreamService extends Service {
                 if("/ws".equals(path)&&key!=null){
                     String accept=Base64.getEncoder().encodeToString(MessageDigest.getInstance("SHA-1").digest((key+"258EAFA5-E914-47DA-95CA-C5AB0DC85B11").getBytes("ISO-8859-1")));
                     OutputStream out=s.getOutputStream(); out.write(("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: "+accept+"\r\n\r\n").getBytes("ISO-8859-1"));out.flush();
-                    clients.add(s); try{while(r.readLine()!=null){} }finally{clients.remove(s);s.close();}
+                    clients.add(s);
+                    byte[] cfg=videoConfig;
+                    if(cfg!=null) {
+                        try { out.write(framePacket(3,0,cfg)); out.flush(); } catch(Exception ignored) {}
+                    }
+                    try{while(r.readLine()!=null){} }finally{clients.remove(s);s.close();}
                 } else {
                     String html=page(); byte[] body=html.getBytes("UTF-8");
                     OutputStream out=s.getOutputStream();out.write(("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: "+body.length+"\r\nConnection: close\r\n\r\n").getBytes("ISO-8859-1"));out.write(body);out.flush();s.close();
                 }
             }catch(Exception e){try{s.close();}catch(Exception ignored){}}
         }
-        synchronized void broadcast(int type,long ts,byte[] data){
+        byte[] framePacket(int type,long ts,byte[] data){
             byte[] p=new byte[1+8+4+data.length];p[0]=(byte)type;ByteBuffer.wrap(p,1,8).putLong(ts);ByteBuffer.wrap(p,9,4).putInt(data.length);System.arraycopy(data,0,p,13,data.length);
-            byte[] ws=frame(p);
+            return frame(p);
+        }
+        synchronized void broadcast(int type,long ts,byte[] data){
+            byte[] ws=framePacket(type,ts,data);
             for(Socket s:clients)try{s.getOutputStream().write(ws);s.getOutputStream().flush();}catch(Exception e){clients.remove(s);try{s.close();}catch(Exception ignored){}}
         }
         byte[] frame(byte[] p){ByteArrayOutputStream o=new ByteArrayOutputStream(p.length+16);o.write(0x82);int n=p.length;if(n<126)o.write(n);else if(n<=65535){o.write(126);o.write((n>>>8)&255);o.write(n&255);}else{o.write(127);for(int i=7;i>=0;i--)o.write((n>>>(8*i))&255);}try{o.write(p);}catch(Exception ignored){}return o.toByteArray();}
