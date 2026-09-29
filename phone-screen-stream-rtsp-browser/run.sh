@@ -76,6 +76,9 @@ fi
 cat > "$CONFIG" <<EOF
 logLevel: info
 
+# ScreenStream already uses RTSP :8554. MediaMTX must use another RTSP port.
+rtspAddress: :8555
+
 webrtc: true
 webrtcAddress: :8889
 webrtcEncryption: false
