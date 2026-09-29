@@ -26,16 +26,35 @@ case "$(uname -m)" in
 esac
 
 if [ ! -x "$BIN" ]; then
-  echo "Downloading MediaMTX $MEDIAMTX_VERSION..."
-  curl -fL --retry 3 \
-    "https://github.com/bluenviron/mediamtx/releases/download/${MEDIAMTX_VERSION}/${ASSET}" \
-    -o "$ARCHIVE"
-  tar -xzf "$ARCHIVE" -C "$BASE_DIR" mediamtx
+  echo "MediaMTX Linux binary cannot run directly in Android Termux."
+  echo "Building MediaMTX as an Android ARM64 PIE binary..."
+
+  if ! command -v go >/dev/null 2>&1; then
+    echo "Installing Go..."
+    pkg install -y golang git
+  fi
+
+  SRC="$BASE_DIR/.mediamtx-src"
+
+  if [ ! -d "$SRC/.git" ]; then
+    echo "Downloading MediaMTX source..."
+    rm -rf "$SRC"
+    git clone --depth 1 --branch "$MEDIAMTX_VERSION" https://github.com/bluenviron/mediamtx.git "$SRC"
+  fi
+
+  cd "$SRC"
+  echo "Generating MediaMTX sources..."
+  go generate ./...
+
+  echo "Building Android ARM64 PIE binary..."
+  CGO_ENABLED=0 GOOS=android GOARCH=arm64 go build -buildmode=pie -o "$BIN" .
+
   chmod +x "$BIN"
-  rm -f "$ARCHIVE"
+  cd "$BASE_DIR"
+
+  echo "MediaMTX Android build ready."
 fi
 
-# Termux may not expose a usable route table. Prefer wlan0 IPv4.
 LAN_IP="$(ip -4 addr show wlan0 2>/dev/null | awk '/inet / {print $2; exit}' | cut -d/ -f1)"
 
 # Fallback: any private IPv4 reported by hostname -I.
