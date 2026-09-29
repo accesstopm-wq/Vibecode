@@ -46,7 +46,7 @@ if [ ! -f "$ANDROID_MARKER" ]; then
   go generate ./...
 
   echo "Building Android ARM64 PIE binary..."
-  CGO_ENABLED=0 GOOS=android GOARCH=arm64 go build -buildmode=pie -o "$BIN" .
+  CGO_ENABLED=0 GOOS=android GOARCH=arm64 go build -buildmode=pie -ldflags="-checklinkname=0" -o "$BIN" .
 
   chmod +x "$BIN"
   touch "$ANDROID_MARKER"
