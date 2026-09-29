@@ -39,6 +39,7 @@ webrtcEncryption: false
 webrtcAllowOrigins: ["*"]
 webrtcLocalUDPAddress: :8189
 webrtcLocalTCPAddress: :8189
+webrtcAdditionalHosts: [${LAN_IP}]
 paths:
   ${STREAM_PATH}:
     source: ${RTSP_URL}
