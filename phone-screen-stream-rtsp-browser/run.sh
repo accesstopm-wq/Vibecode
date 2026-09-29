@@ -35,11 +35,24 @@ if [ ! -x "$BIN" ]; then
   rm -f "$ARCHIVE"
 fi
 
-LAN_IP="$(ip route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src"){print $(i+1); exit}}')"
-[ -n "$LAN_IP" ] || LAN_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
+# Termux may not expose a usable route table. Prefer wlan0 IPv4.
+LAN_IP="$(ip -4 addr show wlan0 2>/dev/null | awk '/inet / {print $2; exit}' | cut -d/ -f1)"
+
+# Fallback: any private IPv4 reported by hostname -I.
+if [ -z "$LAN_IP" ]; then
+  LAN_IP="$(hostname -I 2>/dev/null | tr ' ' '\n' | awk '/^(192\\.168\\.|10\\.|172\\.(1[6-9]|2[0-9]|3[0-1])\\.)/ {print; exit}')"
+fi
+
+# Optional second argument lets you force the LAN IP:
+# ./run.sh "rtsp://..." 192.168.1.9
+if [ -n "${2:-}" ]; then
+  LAN_IP="$2"
+fi
 
 if [ -z "$LAN_IP" ]; then
-  echo "Could not determine LAN IP. Run: ip addr"
+  echo "Could not determine LAN IP."
+  echo
+  echo "Run: ip -4 addr show wlan0"
   exit 1
 fi
 
