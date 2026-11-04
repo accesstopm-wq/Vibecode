@@ -17,17 +17,19 @@ jobs:
           python-version: "3.12"
       - name: Install dependencies
         run: pip install -r auth-session-export/requirements.txt
-      - name: Run authentication check
+      - name: Authenticate and request JSON
         env:
           AD_URL: ${{ secrets.AD_URL }}
           AD_LOGIN: ${{ secrets.AD_LOGIN }}
           AD_PASS: ${{ secrets.AD_PASS }}
         run: python auth-session-export/login.py
-      - name: Upload status report
+      - name: Upload API response and status
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: auth-status
-          path: auth_status.json
+          name: brands-result
+          path: |
+            brands.json
+            auth_status.json
           if-no-files-found: warn
           retention-days: 1
