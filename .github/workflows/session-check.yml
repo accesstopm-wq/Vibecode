@@ -1,0 +1,33 @@
+name: Session check
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  authenticate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -r auth-session-export/requirements.txt
+      - name: Authenticate and encrypt session
+        env:
+          AD_URL: ${{ secrets.AD_URL }}
+          AD_LOGIN: ${{ secrets.AD_LOGIN }}
+          AD_PASS: ${{ secrets.AD_PASS }}
+          AD_EXPORT_KEY: ${{ secrets.AD_EXPORT_KEY }}
+        run: python auth-session-export/login.py
+      - name: Upload encrypted session
+        uses: actions/upload-artifact@v4
+        with:
+          name: session-data
+          path: session_tokens.enc
+          if-no-files-found: error
+          retention-days: 1
