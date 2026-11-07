@@ -26,23 +26,18 @@ textarea{display:block;width:100%;min-height:120px;resize:vertical;border:0;bord
 .out-text{display:block;margin:0;padding:2px 0;color:#d8e5f5;font:13px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;user-select:text;-webkit-user-select:text;touch-action:pan-y}
 .out-error{color:#fca5a5}.out-meta{font-size:11px;color:var(--muted);margin:4px 0}
 .cell-actions{display:flex;gap:7px;align-items:center}.run{background:#14532d;border-color:#166534}.hint{color:var(--muted);font-size:13px;line-height:1.5}
-@media(min-width:720px){.connection{grid-template-columns:minmax(240px,1fr) minmax(180px,260px) auto}.fields{grid-template-columns:1fr 1fr}.fields input:first-child{grid-column:1/-1}}
+@media(min-width:720px){.connection{grid-template-columns:minmax(240px,1fr) minmax(150px,220px) auto}}
 </style>
 </head>
 <body>
 <header>
 <h1>Notebook Output</h1>
 <div class="connection">
-<div class="fields">
-<input id="server" type="url" autocomplete="url" placeholder="Jupyter URL, наприклад https://....trycloudflare.com">
-<input id="token" type="password" autocomplete="off" placeholder="Jupyter token">
-</div>
-<div class="fields">
+<input id="server" type="url" autocomplete="url" placeholder="Встав повне посилання на ноутбук JupyterLab з ?token=...">
 <select id="kernel"><option value="gap-4">GAP</option><option value="python3">Python 3</option></select>
 <button id="connect">Підключити</button>
 </div>
-</div>
-<div id="status" class="status">Вкажи адресу JupyterLab і токен.</div>
+<div id="status" class="status">Встав посилання JupyterLab на кшталт https://…/lab/tree/file.ipynb?token=…</div>
 </header>
 <main>
 <div class="toolbar">
